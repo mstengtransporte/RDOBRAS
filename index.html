@@ -6,6 +6,7 @@
 <title>RDO — Master Energy</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 /* ═══════════════════════════════════════════════════════════
    RDO MASTER ENERGY — ULTRA PRO DESIGN
@@ -1823,6 +1824,12 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
       </div>
       <button type="button" onclick="document.getElementById('backup-file-input').click()" style="background:#1457c8;color:#fff;border:2px solid #0a3a94;padding:14px 12px;font-size:13px;font-weight:900;cursor:pointer;text-transform:uppercase;min-height:48px">📂 ESCOLHER ARQUIVO E ATUALIZAR TODOS OS RDOs</button>
       <input type="file" id="backup-file-input" accept="application/json" onchange="importarBackupArquivo(this)" style="display:none">
+      <div style="border-top:2px dashed var(--border);margin:4px 0"></div>
+      <label style="font-size:11px;font-weight:900;text-transform:uppercase;color:var(--text3)">Restaurar da nuvem (Supabase)</label>
+      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;background:var(--surface2);padding:8px 10px;border-left:3px solid #7c3aed">
+        ☁️ Use isso ao abrir o app num aparelho novo, ou se quiser garantir que este aparelho tem todos os RDOs que já foram salvos na nuvem por qualquer aparelho.
+      </div>
+      <button type="button" onclick="restaurarDoSupabase()" style="background:#7c3aed;color:#fff;border:2px solid #5b21b6;padding:14px 12px;font-size:13px;font-weight:900;cursor:pointer;text-transform:uppercase;min-height:48px">☁️ BUSCAR E RESTAURAR DA NUVEM</button>
     </div>
     <div class="multipdf-footer">
       <button class="multipdf-cancel" onclick="document.getElementById('backup-modal').classList.remove('show')">Fechar</button>
@@ -1847,6 +1854,141 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
 <script>
 const LOGO_SRC = 'data:image/jpeg;base64,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';
 const NUM_OSE = 6;
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUPABASE — backup automático em nuvem (banco de dados)
+// ═══════════════════════════════════════════════════════════════════════
+// O app continua funcionando 100% pelo localStorage (rápido, funciona sem
+// internet). Por cima disso, toda vez que um RDO é salvo ou excluído aqui,
+// a mesma ação é replicada pro Supabase em segundo plano — se der erro de
+// internet, o app não trava nem perde nada local; só a nuvem fica atrasada
+// até a próxima tentativa (a cada salvamento novo ela tenta de novo).
+// ═══════════════════════════════════════════════════════════════════════
+const SUPABASE_URL='https://mrarlmpqmepvijikamzk.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yYXJsbXBxbWVwdmlqaWthbXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NzExNDgsImV4cCI6MjEwMDI0NzE0OH0.mxat602nOGn1QqoiHKJ6MIDrdvQmMr-cFWWZbW6XKRs';
+let supabaseClient=null;
+try{
+  if(window.supabase&&window.supabase.createClient){
+    supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+  }
+}catch(e){console.error('Supabase init error:',e);}
+
+// Sobe (cria ou atualiza) um RDO inteiro no Supabase: cabeçalho + 6 OSEs +
+// todos os funcionários. Sempre apaga as OSEs/funcionários antigos daquele
+// RDO antes de reinserir — mais simples e seguro que tentar calcular um
+// "diff" linha por linha, e como são poucas linhas por RDO (6 OSEs + ~20
+// funcionários no máximo) o custo disso é desprezível.
+async function syncSalvarSupabase(d){
+  if(!supabaseClient) return;
+  try{
+    const h=d.header||{};
+    const rdoKey=chaveRDO(h.data);
+    const{data:rdoRow,error:erroRdo}=await supabaseClient
+      .from('rdos')
+      .upsert({
+        rdo_key:rdoKey,
+        nrdo:h.nrdo||null,
+        data:h.data||null,
+        obra:h.obra||null,
+        disciplina:h.disc||null,
+        encarregado:h.enc||null,
+        names_list:d.namesList||[],
+        funcs_list:d.funcsList||[],
+        row_counter:d.rowCounter||0
+      },{onConflict:'rdo_key'})
+      .select('id')
+      .single();
+    if(erroRdo||!rdoRow){console.error('Supabase erro ao salvar RDO:',erroRdo);return;}
+    const rdoId=rdoRow.id;
+
+    // Limpa OSEs/funcionários antigos desse RDO antes de reinserir a versão atual
+    await supabaseClient.from('rdo_oses').delete().eq('rdo_id',rdoId);
+    await supabaseClient.from('rdo_workers').delete().eq('rdo_id',rdoId);
+
+    const osesRows=(d.oses||[]).map((o,idx)=>({
+      rdo_id:rdoId,ose_numero:idx+1,nome:o.name||null,
+      status:o.status||'sem',descricao:o.desc||null,responsavel:o.resp||null
+    }));
+    if(osesRows.length) await supabaseClient.from('rdo_oses').insert(osesRows);
+
+    const workersRows=(d.workers||[])
+      .filter(w=>w.name||(w.hrs||[]).some(v=>v))
+      .map((w,idx)=>({
+        rdo_id:rdoId,worker_index:idx,nome:w.name||null,funcao:w.func||null,hrs:w.hrs||[],hst:w.hst||[]
+      }));
+    if(workersRows.length) await supabaseClient.from('rdo_workers').insert(workersRows);
+  }catch(e){console.error('Supabase syncSalvarSupabase error:',e);}
+}
+
+// Apaga um RDO do Supabase (OSEs e funcionários somem juntos, configurado
+// via ON DELETE CASCADE no banco — não precisa apagar um por um aqui).
+async function syncDeletarSupabase(rdoKey){
+  if(!supabaseClient) return;
+  try{
+    await supabaseClient.from('rdos').delete().eq('rdo_key',rdoKey);
+  }catch(e){console.error('Supabase syncDeletarSupabase error:',e);}
+}
+
+// Busca TODOS os RDOs salvos no Supabase e grava (ou atualiza) cada um no
+// localStorage deste aparelho — usado principalmente quando o app é aberto
+// num celular/computador novo e precisa recuperar o histórico que só
+// existia na nuvem até agora. RDOs que já existirem aqui com a mesma
+// chave são simplesmente sobrescritos pela versão da nuvem (que é sempre
+// a mais recente, já que todo salvamento sincroniza pra lá).
+async function restaurarDoSupabase(){
+  if(!supabaseClient){ showToast('Supabase não está configurado.','#dc2626'); return; }
+  const ok=confirm('Isso busca TODOS os RDOs salvos na nuvem (Supabase) e traz pra este aparelho. RDOs que já existirem aqui com o mesmo identificador serão atualizados com a versão da nuvem. Continuar?');
+  if(!ok) return;
+  showToast('☁️ Buscando RDOs na nuvem...','#1457c8');
+  try{
+    const{data:rdosData,error:erroRdos}=await supabaseClient.from('rdos').select('*').limit(5000);
+    if(erroRdos){ showToast('❌ Erro ao buscar RDOs: '+erroRdos.message,'#dc2626'); return; }
+    if(!rdosData||!rdosData.length){ showToast('Nenhum RDO encontrado na nuvem ainda.','#d97706'); return; }
+
+    const{data:osesData,error:erroOses}=await supabaseClient.from('rdo_oses').select('*').limit(30000);
+    if(erroOses){ showToast('❌ Erro ao buscar OSEs: '+erroOses.message,'#dc2626'); return; }
+
+    const{data:workersData,error:erroWorkers}=await supabaseClient.from('rdo_workers').select('*').limit(60000);
+    if(erroWorkers){ showToast('❌ Erro ao buscar funcionários: '+erroWorkers.message,'#dc2626'); return; }
+
+    // Agrupa OSEs e funcionários pelo RDO a que pertencem, pra montar cada RDO de volta
+    // no mesmo formato que o app usa localmente (header + oses[6] + workers[]).
+    const osesPorRdo={};(osesData||[]).forEach(o=>{(osesPorRdo[o.rdo_id]=osesPorRdo[o.rdo_id]||[]).push(o);});
+    const workersPorRdo={};(workersData||[]).forEach(w=>{(workersPorRdo[w.rdo_id]=workersPorRdo[w.rdo_id]||[]).push(w);});
+
+    let sucesso=0,falha=0;
+    rdosData.forEach(r=>{
+      try{
+        const osesArr=Array.from({length:NUM_OSE},(_,idx)=>{
+          const n=idx+1;
+          const achada=(osesPorRdo[r.id]||[]).find(o=>o.ose_numero===n);
+          return{name:achada?.nome||'',status:achada?.status||'sem',desc:achada?.descricao||'',descText:achada?.descricao||'',resp:achada?.responsavel||''};
+        });
+        const workersArr=(workersPorRdo[r.id]||[])
+          .slice().sort((a,b)=>(a.worker_index??0)-(b.worker_index??0))
+          .map(w=>({name:w.nome||'',func:w.funcao||'',hrs:w.hrs||[],hst:w.hst||[]}));
+        const d={
+          header:{nrdo:r.nrdo||'',data:r.data||'',obra:r.obra||'',enc:r.encarregado||'',disc:r.disciplina||''},
+          rowCounter:r.row_counter||0,
+          workers:workersArr,
+          oses:osesArr,
+          namesList:r.names_list||[],
+          funcsList:r.funcs_list||[]
+        };
+        localStorage.setItem(r.rdo_key,JSON.stringify(d));
+        sucesso++;
+      }catch(e){falha++;}
+    });
+
+    document.getElementById('backup-modal')?.classList.remove('show');
+    showToast(`✓ ${sucesso} RDO(s) restaurado(s) da nuvem${falha?` — ${falha} falharam`:''}. Recarregando...`,'#158038');
+    setTimeout(()=>location.reload(),1200);
+  }catch(e){
+    console.error('restaurarDoSupabase error:',e);
+    showToast('❌ Erro ao restaurar da nuvem — confira sua internet e tente de novo.','#dc2626');
+  }
+}
+
 let darkMode = false;
 let rowCounter = 0;
 
@@ -4163,6 +4305,9 @@ function autoSilentSave(){
     _lastSaveKey=key;
     const dot=document.getElementById('autosave-dot');
     if(dot){dot.classList.add('show');setTimeout(()=>dot.classList.remove('show'),1800);}
+    // Sincroniza com o Supabase em segundo plano — não trava o salvamento local
+    // nem impede o app de continuar funcionando se a internet cair.
+    syncSalvarSupabase(d);
   }catch(e){}
 }
 // Salva ao fechar/sair da aba
@@ -4604,6 +4749,7 @@ function deletarRDO(key,btn){
   if(!confirm('Excluir este RDO permanentemente?'))return;
   localStorage.removeItem(key);
   if(localStorage.getItem('rdo-last-key')===key) localStorage.removeItem('rdo-last-key');
+  syncDeletarSupabase(key); // apaga também no banco de dados (Supabase) — OSEs e horas somem juntas
   btn.closest('.rdo-result-item').remove();
   const count=document.querySelectorAll('.rdo-result-item').length;
   document.getElementById('search-count').textContent=count?`${count} RDO(s) encontrado(s)`:'';
