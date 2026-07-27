@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RDO — Master Energy</title>
+<!-- PWA: permite "Instalar app" / "Adicionar à tela inicial" no celular e no computador -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#1457c8">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RDO Master Energy">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -6160,6 +6168,16 @@ function importarBackupArquivo(inputEl){
   };
   reader.onerror=()=>showToast('Erro ao ler o arquivo de backup.','#dc2626');
   reader.readAsText(file);
+}
+
+// PWA: registra o service worker (permite "Instalar app" e abrir offline).
+// Só funciona quando hospedado (http/https) — em arquivo local (file://) o
+// navegador bloqueia service worker por segurança, então isso é ignorado
+// silenciosamente nesse caso, sem quebrar o resto do app.
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js').catch(e=>console.log('SW não registrado:',e));
+  });
 }
 </script>
 </body>
