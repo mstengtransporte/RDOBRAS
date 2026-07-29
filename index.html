@@ -5463,8 +5463,20 @@ function coletarDadosExtraEscopo(dataInicio,dataFim){
   return registros;
 }
 
-function abrirExtraEscopo(){
+// Antes de abrir qualquer painel de visão consolidada, o admin mestre puxa da nuvem os
+// RDOs de TODOS os encarregados (não só os que já estão neste aparelho) — assim a soma
+// que ele vê sempre reflete todo mundo, sem precisar lembrar de clicar em "Restaurar da
+// nuvem" antes. Encarregado comum nunca chama isso (só vê o próprio, local, é suficiente).
+async function sincronizarSeAdmin(){
+  if(!usuarioAtual||usuarioAtual.papel!=='admin_mestre') return;
+  showToast('☁️ Atualizando com dados de todos os encarregados...','#7c3aed');
+  const{erro}=await buscarERestaurarDaNuvem(null,null);
+  if(erro) showToast('⚠️ Não foi possível atualizar da nuvem agora — mostrando os dados que já estão neste aparelho.','#d97706');
+}
+
+async function abrirExtraEscopo(){
   if(!exigirAdmin()) return;
+  await sincronizarSeAdmin();
   autoSilentSave(); // ESSENCIAL: garante que o Extra Escopo lançado agora na tela (ainda não salvo)
                      // entra na soma — sem isso, o total podia ficar diferente do que está na tela
   document.getElementById('ee-de').value='';
@@ -5905,8 +5917,9 @@ function coletarDadosAndamento(dataInicio,dataFim){
   return registros;
 }
 
-function abrirAndamento(){
+async function abrirAndamento(){
   if(!exigirAdmin()) return;
+  await sincronizarSeAdmin();
   autoSilentSave(); // ESSENCIAL: garante que o Andamento lançado agora na tela entra na soma
   document.getElementById('an-de').value='';
   document.getElementById('an-ate').value='';
@@ -6168,8 +6181,9 @@ function coletarDadosProjeto(dataInicio,dataFim){
   return registros;
 }
 
-function abrirProjetos(){
+async function abrirProjetos(){
   if(!exigirAdmin()) return;
+  await sincronizarSeAdmin();
   autoSilentSave(); // ESSENCIAL: garante que as horas lançadas agora entram no total do projeto
   document.getElementById('pj-de').value='';
   document.getElementById('pj-ate').value='';
