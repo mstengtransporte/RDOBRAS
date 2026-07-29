@@ -2161,10 +2161,15 @@ function coletarResumoPorEncarregado(){
     if(h.obra) r.obras.add(h.obra);
     if(h.data>r.ultimaData) r.ultimaData=h.data;
     let totalRDO=0;
+    const atividades=[];
     (d.oses||[]).forEach((o,idx)=>{
       if(!o.status||o.status==='sem') return;
       let horasOSE=0;
-      (d.workers||[]).forEach(w=>{ horasOSE+=parseHrs((w.hrs||[])[idx]||''); });
+      const trabalhadores=[];
+      (d.workers||[]).forEach(w=>{
+        const hrs=parseHrs((w.hrs||[])[idx]||'');
+        if(hrs>0){ horasOSE+=hrs; trabalhadores.push({nome:(w.name||'—').toUpperCase(),funcao:(w.func||'—').toUpperCase(),horas:hrs}); }
+      });
       if(horasOSE<=0) return;
       totalRDO+=horasOSE;
       r.total+=horasOSE;
@@ -2172,8 +2177,17 @@ function coletarResumoPorEncarregado(){
       else if(o.status==='ext') r.ext+=horasOSE;
       else if(o.status==='conc') r.conc+=horasOSE;
       else if(o.status==='par') r.par+=horasOSE;
+      const descTexto=(o.desc||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
+      atividades.push({
+        ose:`OSE ${String(idx+1).padStart(2,'0')}`,
+        nomeProjeto:(o.name||'—').toUpperCase(),
+        status:o.status,
+        descricao:descTexto?descTexto.toUpperCase():'— (sem descrição preenchida) —',
+        horas:horasOSE,
+        trabalhadores
+      });
     });
-    r.rdosDetalhe.push({key:k,data:h.data,obra:h.obra||'—',nrdo:h.nrdo||'—',disc:h.disc||'—',totalHoras:totalRDO});
+    r.rdosDetalhe.push({key:k,data:h.data,obra:h.obra||'—',nrdo:h.nrdo||'—',disc:h.disc||'—',totalHoras:totalRDO,atividades});
   }
   return Object.values(porEnc).map(r=>({...r,rdos:r.rdos.size,obras:r.obras.size,rdosDetalhe:r.rdosDetalhe.sort((a,b)=>b.data.localeCompare(a.data))}));
 }
@@ -2216,52 +2230,34 @@ function renderizarVisaoGeralExecutivo(){
   const totalAnd=resumo.reduce((s,r)=>s+r.and,0);
   const totalExt=resumo.reduce((s,r)=>s+r.ext,0);
   const totalConc=resumo.reduce((s,r)=>s+r.conc,0);
-  const totalPar=resumo.reduce((s,r)=>s+r.par,0);
   const totalRDOs=resumo.reduce((s,r)=>s+r.rdos,0);
 
   document.getElementById('exec-conteudo').innerHTML=`
     <div style="font-size:18px;font-weight:900;margin-bottom:2px">📊 Visão Geral — Todos os Encarregados</div>
     <div style="font-size:11.5px;color:var(--text3);margin-bottom:16px">Soma de tudo que está sincronizado da nuvem até agora.</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px">
-      <div class="ee-card"><div class="v">${fmt(totalGeral)}</div><div class="l">Total H.H Geral</div></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">
+      <div class="ee-card"><div class="v" style="color:var(--text)">${fmt(totalGeral)}</div><div class="l">Total H.H Geral</div></div>
       <div class="ee-card"><div class="v" style="color:#1a52c8">${fmt(totalAnd)}</div><div class="l">Em Andamento</div></div>
       <div class="ee-card"><div class="v" style="color:#158038">${fmt(totalExt)}</div><div class="l">Extra Escopo</div></div>
       <div class="ee-card"><div class="v" style="color:#6830cc">${fmt(totalConc)}</div><div class="l">Concluído</div></div>
     </div>
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="border-bottom:2px solid var(--border,#000);text-align:left">
-        <th style="padding:6px 8px">Encarregado</th>
-        <th style="padding:6px 8px;text-align:center">RDOs</th>
-        <th style="padding:6px 8px;text-align:center">Obras</th>
-        <th style="padding:6px 8px;text-align:right;color:#1a52c8">Andamento</th>
-        <th style="padding:6px 8px;text-align:right;color:#158038">Extra Escopo</th>
-        <th style="padding:6px 8px;text-align:right;color:#6830cc">Concluído</th>
-        <th style="padding:6px 8px;text-align:right;font-weight:900">Total H.H</th>
-      </tr></thead>
-      <tbody>
-        ${resumo.map(r=>`<tr style="border-bottom:1px solid var(--border,#eee);cursor:pointer" onclick="selecionarEncarregadoExecutivo('${r.nome.replace(/'/g,"\\'")}')">
-          <td style="padding:6px 8px;font-weight:800">👷 ${r.nome}</td>
-          <td style="padding:6px 8px;text-align:center">${r.rdos}</td>
-          <td style="padding:6px 8px;text-align:center">${r.obras}</td>
-          <td style="padding:6px 8px;text-align:right;color:#1a52c8">${fmt(r.and)}h</td>
-          <td style="padding:6px 8px;text-align:right;color:#158038">${fmt(r.ext)}h</td>
-          <td style="padding:6px 8px;text-align:right;color:#6830cc">${fmt(r.conc)}h</td>
-          <td style="padding:6px 8px;text-align:right;font-weight:900">${fmt(r.total)}h</td>
-        </tr>`).join('')}
-      </tbody>
-      <tfoot><tr style="border-top:2px solid var(--border,#000);font-weight:900">
-        <td style="padding:6px 8px">TOTAL GERAL</td>
-        <td style="padding:6px 8px;text-align:center">${totalRDOs}</td>
-        <td style="padding:6px 8px"></td>
-        <td style="padding:6px 8px;text-align:right;color:#1a52c8">${fmt(totalAnd)}h</td>
-        <td style="padding:6px 8px;text-align:right;color:#158038">${fmt(totalExt)}h</td>
-        <td style="padding:6px 8px;text-align:right;color:#6830cc">${fmt(totalConc)}h</td>
-        <td style="padding:6px 8px;text-align:right">${fmt(totalGeral)}h</td>
-      </tr></tfoot>
-    </table>
+    <div style="font-size:12px;font-weight:900;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Total geral de cada encarregado, separadamente</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${resumo.map(r=>`
+        <div onclick="selecionarEncarregadoExecutivo('${r.nome.replace(/'/g,"\\'")}')" style="border:2px solid var(--border,#000);border-radius:10px;padding:12px 14px;cursor:pointer;background:var(--surface2)">
+          <div style="font-size:14px;font-weight:900;margin-bottom:8px">👷 ${r.nome}</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 14px;font-size:12px">
+            <div><span style="color:var(--text3)">RDOs:</span> <b>${r.rdos}</b></div>
+            <div><span style="color:var(--text3)">Obras:</span> <b>${r.obras}</b></div>
+            <div><span style="color:var(--text3)">Total H.H:</span> <b style="color:var(--text);font-size:13px">${fmt(r.total)}h</b></div>
+            <div><span style="color:#1a52c8">Andamento:</span> <b style="color:#1a52c8">${fmt(r.and)}h</b></div>
+            <div><span style="color:#158038">Extra Escopo:</span> <b style="color:#158038">${fmt(r.ext)}h</b></div>
+            <div><span style="color:#6830cc">Concluído:</span> <b style="color:#6830cc">${fmt(r.conc)}h</b></div>
+          </div>
+        </div>
+      `).join('')}
     </div>
-    <div style="font-size:10.5px;color:var(--text3);margin-top:10px">Toque no nome de um encarregado (na lista ao lado ou na tabela) pra ver o histórico completo de RDOs dele.</div>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:12px">Toque em qualquer encarregado (na lista ao lado, ou no bloco acima) pra ver o histórico completo de RDOs, atividades, descrições e funcionários envolvidos.</div>
   `;
 }
 
@@ -2278,20 +2274,30 @@ function selecionarEncarregadoExecutivo(nome){
     if(b.textContent.includes(nome)) b.style.background='#9d174d';
   });
 
+  const STATUS_COR={and:'#1a52c8',ext:'#158038',conc:'#6830cc',par:'#e07010'};
+  const STATUS_NOME={and:'Em Andamento',ext:'Extra Escopo',conc:'Concluído',par:'Paralisado'};
+
   document.getElementById('exec-conteudo').innerHTML=`
     <div style="font-size:18px;font-weight:900;margin-bottom:2px">👷 ${r.nome}</div>
     <div style="font-size:11.5px;color:var(--text3);margin-bottom:16px">${r.rdos} RDO(s) · ${r.obras} obra(s) diferente(s) · último lançamento em ${formatarDataBR(r.ultimaData)}</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px">
-      <div class="ee-card"><div class="v">${fmt(r.total)}</div><div class="l">Total H.H</div></div>
+      <div class="ee-card"><div class="v" style="color:var(--text)">${fmt(r.total)}</div><div class="l">Total H.H</div></div>
       <div class="ee-card"><div class="v" style="color:#1a52c8">${fmt(r.and)}</div><div class="l">Em Andamento</div></div>
       <div class="ee-card"><div class="v" style="color:#158038">${fmt(r.ext)}</div><div class="l">Extra Escopo</div></div>
       <div class="ee-card"><div class="v" style="color:#6830cc">${fmt(r.conc)}</div><div class="l">Concluído</div></div>
     </div>
-    <div style="font-size:12px;font-weight:900;margin-bottom:6px">Histórico de RDOs</div>
-    <div style="display:flex;flex-direction:column;gap:6px">
-      ${r.rdosDetalhe.map(x=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border,#e5e5e5);border-radius:8px;font-size:12px">
-        <div><b>${formatarDataBR(x.data)}</b> — 🏭 ${x.obra} ${x.disc&&x.disc!=='—'?'· '+x.disc:''} <span style="opacity:.7">(${x.nrdo})</span></div>
-        <div style="font-weight:900;white-space:nowrap">${fmt(x.totalHoras)}h</div>
+    <div style="font-size:12px;font-weight:900;margin-bottom:6px">Histórico de RDOs — data, atividades, descrição e funcionários</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${r.rdosDetalhe.map(x=>`<div style="padding:10px 12px;border:1px solid var(--border,#e5e5e5);border-radius:8px">
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px">
+          <div style="font-weight:900">${formatarDataBR(x.data)} — 🏭 ${x.obra} ${x.disc&&x.disc!=='—'?'· '+x.disc:''} <span style="font-weight:400;opacity:.7">(${x.nrdo})</span></div>
+          <div style="font-weight:900;white-space:nowrap">${fmt(x.totalHoras)}h</div>
+        </div>
+        ${(x.atividades||[]).map(a=>`<div style="margin:6px 0 0 8px;padding:6px 8px;border-left:3px solid ${STATUS_COR[a.status]||'#888'};background:var(--surface2)">
+          <div style="font-size:11px;font-weight:800;color:${STATUS_COR[a.status]||'#888'}">${STATUS_NOME[a.status]||a.status} — ${a.nomeProjeto} (${a.ose}) — ${fmt(a.horas)}h</div>
+          <div style="font-size:10.5px;color:var(--text2);margin:2px 0">${a.descricao}</div>
+          <div style="font-size:10.5px;color:var(--text3)">👥 ${a.trabalhadores.map(t=>`${t.nome} (${t.funcao}): ${fmt(t.horas)}h`).join(', ')||'—'}</div>
+        </div>`).join('')||'<div style="margin-left:8px;font-size:10.5px;color:var(--text3)">Sem atividades com status/horas lançadas.</div>'}
       </div>`).join('')||'<div style="color:var(--text3);font-size:11px">Nenhum RDO com horas lançadas.</div>'}
     </div>
   `;
