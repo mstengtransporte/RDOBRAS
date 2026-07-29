@@ -2017,6 +2017,21 @@ async function fazerLogin(){
       return;
     }
     await carregarPerfilUsuario();
+
+    // Proteção contra "sujeira" de outro login no mesmo aparelho: se já tinha RDOs
+    // salvos localmente de uma conta DIFERENTE da que acabou de entrar, avisa e
+    // oferece limpar — sem isso, dados de um encarregado podiam aparecer misturados
+    // com os de outro só por terem usado o mesmo computador/navegador antes.
+    const ultimoUsuarioId=localStorage.getItem('rdo-ultimo-usuario-id');
+    const temRdosLocais=Object.keys(localStorage).some(k=>k.startsWith('rdo-')&&!CHAVES_META_BACKUP.includes(k));
+    if(usuarioAtual&&ultimoUsuarioId&&ultimoUsuarioId!==usuarioAtual.id&&temRdosLocais){
+      const limpar=confirm('Este aparelho tem RDOs salvos localmente de OUTRO login anterior. Pra não misturar com a conta de agora, recomendo limpar esses dados antigos deste aparelho (eles continuam seguros na nuvem, de quem os criou).\n\nLimpar os dados antigos deste aparelho agora?');
+      if(limpar){
+        Object.keys(localStorage).filter(k=>k.startsWith('rdo-')&&!CHAVES_META_BACKUP.includes(k)).forEach(k=>localStorage.removeItem(k));
+      }
+    }
+    if(usuarioAtual) localStorage.setItem('rdo-ultimo-usuario-id',usuarioAtual.id);
+
     document.getElementById('login-overlay')?.remove();
     iniciarAppAposLogin();
   }catch(e){
