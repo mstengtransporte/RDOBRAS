@@ -382,7 +382,7 @@ tbody td:first-child{text-align:left;padding-left:8px}
 /* Selects de nome e função */
 select.cell-name,select.cell-func{
   background:transparent;border:none;border-bottom:1.5px solid #000;
-  width:100%;padding:2px 4px;color:var(--text);font-size:12px;font-weight:900;
+  width:100%;padding:2px 4px;color:var(--text);font-size:13px;font-weight:900;
   outline:none;cursor:pointer;min-height:24px;
   -webkit-appearance:none;appearance:none;text-transform:uppercase;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%236b7fa0'/%3E%3C/svg%3E");
@@ -390,7 +390,7 @@ select.cell-name,select.cell-func{
   padding-right:16px
 }
 select.cell-name{min-width:130px}
-select.cell-func{min-width:100px;color:var(--text2)}
+select.cell-func{min-width:100px;color:var(--text)}
 .cell-print-text{display:none}
 input.cell-name,input.cell-func{
   background:transparent;border:none;border-bottom:1.5px solid var(--accent);
@@ -1363,9 +1363,9 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
       <div style="font-size:12.5px;color:#9ca3af;margin-top:4px">Entre com seu e-mail e senha</div>
     </div>
     <form id="login-form" onsubmit="return false" style="display:flex;flex-direction:column;gap:10px">
-      <input type="email" id="login-email" placeholder="E-mail" autocomplete="username" class="login-input" style="padding:13px;border-radius:8px;border:1px solid #2a3548;background:#141c2e;color:#fff;font-size:14px">
+      <input type="email" id="login-email" placeholder="E-mail" autocomplete="username" class="login-input" style="padding:13px;border-radius:8px;border:1px solid #2a3548;background:#141c2e;color:#fff;font-size:16px;font-weight:700;letter-spacing:.3px">
       <div style="position:relative">
-        <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()" class="login-input" style="padding:13px 44px 13px 13px;border-radius:8px;border:1px solid #2a3548;background:#141c2e;color:#fff;font-size:14px;width:100%;box-sizing:border-box">
+        <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()" class="login-input" style="padding:13px 44px 13px 13px;border-radius:8px;border:1px solid #2a3548;background:#141c2e;color:#fff;font-size:16px;font-weight:700;letter-spacing:.3px;width:100%;box-sizing:border-box">
         <button type="button" onclick="alternarMostrarSenha()" id="btn-olho-senha" aria-label="Mostrar senha" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;padding:6px;line-height:1">👁️</button>
       </div>
       <button type="button" id="login-btn" onclick="fazerLogin()" style="padding:14px;border-radius:8px;border:none;background:#1457c8;color:#fff;font-weight:900;font-size:14px;cursor:pointer;margin-top:4px">Entrar</button>
@@ -2928,6 +2928,7 @@ function addWorkerRow(doRecalc=true){
     <td><button class="btn-del-row" onclick="deleteRow(${i})" title="Excluir">✕</button></td>
   `;
   tbody.appendChild(tr);
+  renumerarLinhasVisiveis();
   if(doRecalc)recalcAll();
 }
 
@@ -2944,7 +2945,20 @@ function deleteRow(i){
   if(!confirm(aviso)) return;
   salvarSnapshotDesfazer();
   tr.remove();
+  renumerarLinhasVisiveis();
   recalcAll();
+}
+
+// Depois de excluir uma linha, os números mostrados (#1, #2, #3...) precisam continuar
+// em sequência sem buracos — por exemplo, se sobrar só 1 funcionário depois de apagar
+// vários, ele tem que voltar a mostrar "1", não ficar com o número antigo dele (ex: 61).
+// Isso mexe só no número visível na tela; o id interno de cada linha (usado pelas células
+// de hora, nome, função) continua o mesmo, então nada mais quebra.
+function renumerarLinhasVisiveis(){
+  document.querySelectorAll('#workers-body tr').forEach((tr,idx)=>{
+    const rotulo=tr.querySelector('.row-num');
+    if(rotulo) rotulo.textContent=idx+1;
+  });
 }
 
 // ── OSE CARDS ──
