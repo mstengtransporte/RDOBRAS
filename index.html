@@ -2380,12 +2380,26 @@ async function alternarClienteAtivo(id,novoStatus,nome){
 // RDO antes de reinserir — mais simples e seguro que tentar calcular um
 // "diff" linha por linha, e como são poucas linhas por RDO (6 OSEs + ~20
 // funcionários no máximo) o custo disso é desprezível.
+// Trava contra corrida entre salvamentos simultâneos do MESMO RDO: o app dispara o
+// salvamento na nuvem de vários lugares (autosave, troca de tela, etc.) — sem isso, dois
+// salvamentos quase ao mesmo tempo podiam se cruzar (um apaga, o outro também apaga, os
+// dois inserem de novo) e duplicar as horas de um funcionário no banco. Com a fila abaixo,
+// cada RDO só processa um salvamento de cada vez, na ordem, nunca dois ao mesmo tempo.
+const _filaSyncPorRdo={};
 async function syncSalvarSupabase(d){
+  const h=d.header||{};
+  const rdoKey=chaveRDO(h.data);
+  const anterior=_filaSyncPorRdo[rdoKey]||Promise.resolve();
+  const atual=anterior.then(()=>_syncSalvarSupabaseReal(d,rdoKey)).catch(e=>console.error('syncSalvarSupabase (fila):',e));
+  _filaSyncPorRdo[rdoKey]=atual;
+  return atual;
+}
+
+async function _syncSalvarSupabaseReal(d,rdoKey){
   const supabaseClient=getSupabaseClient();
   if(!supabaseClient||!usuarioAtual) return; // sem login, não sincroniza (fica só local)
   try{
     const h=d.header||{};
-    const rdoKey=chaveRDO(h.data);
     const{data:rdoRow,error:erroRdo}=await supabaseClient
       .from('rdos')
       .upsert({
