@@ -4087,37 +4087,15 @@ function pdfParaWhatsApp(){
     setTimeout(()=>{ // deixa o loading aparecer antes de bloquear a thread
       try{
         const doc=gerarPdfComJsPDF();
-        const blob=doc.output('blob');
-        const pdfFile=new File([blob],filename,{type:'application/pdf'});
         fecharLoading();
 
-        // CELULAR: manda o PDF primeiro — é a parte que realmente importa, e sai garantido
-        // porque acontece na hora do toque (o navegador exige isso pra compartilhar arquivo).
-        // Só DEPOIS do PDF já ter saído, abre a mensagem de texto como complemento — se a
-        // pessoa ignorar ou fechar essa parte, o documento já foi entregue de qualquer jeito.
-        if(navigator.canShare&&navigator.canShare({files:[pdfFile]})){
-          navigator.share({files:[pdfFile],title:`RDO ${formatarDataBR(h.data)||''}`})
-            .then(()=>{
-              showToast('✓ PDF enviado! Abrindo mensagem com as informações...','#25d366');
-              setTimeout(()=>{
-                window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(msg),'_blank');
-              },900);
-            })
-            .catch(err=>{
-              if(err.name!=='AbortError'){
-                doc.save(filename);
-                window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(msg),'_blank');
-                showToast('📎 PDF salvo! Anexe no WhatsApp.','#25d366');
-              }
-            });
-          return;
-        }
-
-        // DESKTOP / sem Web Share: baixa + abre WhatsApp
+        // Baixa o PDF e abre o WhatsApp já com a mensagem pronta pra enviar (Data, Obra,
+        // Encarregado). Depois é só anexar o PDF (que acabou de baixar) na sequência —
+        // vão como 2 mensagens (texto e depois o arquivo), do jeito que sempre funcionou.
         doc.save(filename);
         setTimeout(()=>{
           window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(msg),'_blank');
-          showToast('📎 PDF baixado! Anexe no WhatsApp.','#128c7e');
+          showToast('📎 PDF baixado! Anexe no WhatsApp.','#25d366');
         },500);
 
       }catch(err){
