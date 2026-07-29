@@ -652,6 +652,15 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
 .pdf-spinner{width:52px;height:52px;border:5px solid rgba(255,255,255,.15);border-top-color:#25d366;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+/* Corrige o preenchimento automático do navegador deixando o campo escuro/ilegível */
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus{
+  -webkit-box-shadow:0 0 0px 1000px #141c2e inset;
+  -webkit-text-fill-color:#fff;
+  caret-color:#fff;
+  transition:background-color 9999s ease-in-out 0s;
+}
 .pdf-loading-text{color:#fff;font-size:15px;font-weight:900;letter-spacing:.3px;text-align:center;line-height:1.6;text-transform:uppercase}
 .pdf-loading-text small{font-size:10px;font-weight:400;opacity:.65;display:block;margin-top:2px;text-transform:none}
 .pdf-progress{width:220px;height:5px;background:rgba(255,255,255,.15);overflow:hidden;margin-top:4px}
@@ -1354,8 +1363,11 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
       <div style="font-size:12.5px;color:#9ca3af;margin-top:4px">Entre com seu e-mail e senha</div>
     </div>
     <form id="login-form" onsubmit="return false" style="display:flex;flex-direction:column;gap:10px">
-      <input type="email" id="login-email" placeholder="E-mail" autocomplete="username" style="padding:13px;border-radius:8px;border:1px solid #2a3548;background:#141c2e;color:#fff;font-size:14px">
-      <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()" style="padding:13px;border-radius:8px;border:1px solid #2a3548;background:#141c2e;color:#fff;font-size:14px">
+      <input type="email" id="login-email" placeholder="E-mail" autocomplete="username" class="login-input" style="padding:13px;border-radius:8px;border:1px solid #2a3548;background:#141c2e;color:#fff;font-size:14px">
+      <div style="position:relative">
+        <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()" class="login-input" style="padding:13px 44px 13px 13px;border-radius:8px;border:1px solid #2a3548;background:#141c2e;color:#fff;font-size:14px;width:100%;box-sizing:border-box">
+        <button type="button" onclick="alternarMostrarSenha()" id="btn-olho-senha" aria-label="Mostrar senha" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;padding:6px;line-height:1">👁️</button>
+      </div>
       <button type="button" id="login-btn" onclick="fazerLogin()" style="padding:14px;border-radius:8px;border:none;background:#1457c8;color:#fff;font-weight:900;font-size:14px;cursor:pointer;margin-top:4px">Entrar</button>
       <div id="login-erro" style="color:#f87171;font-size:12px;text-align:center;min-height:16px"></div>
     </form>
@@ -1962,6 +1974,18 @@ async function carregarPerfilUsuario(){
   }
 }
 
+// Mostra/esconde a senha digitada no login (o "olho") — ajuda a conferir se digitou
+// certo antes de tentar entrar, principalmente em senhas complicadas.
+function alternarMostrarSenha(){
+  const campo=document.getElementById('login-senha');
+  const btn=document.getElementById('btn-olho-senha');
+  if(!campo||!btn) return;
+  const mostrando=campo.type==='text';
+  campo.type=mostrando?'password':'text';
+  btn.textContent=mostrando?'👁️':'🙈';
+  btn.setAttribute('aria-label',mostrando?'Mostrar senha':'Esconder senha');
+}
+
 async function fazerLogin(){
   const email=document.getElementById('login-email').value.trim();
   const senha=document.getElementById('login-senha').value;
@@ -2112,7 +2136,7 @@ async function carregarListaClientesAdmin(){
     lista.innerHTML=data.map(c=>`
       <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border,#e5e5e5);border-radius:8px;${c.ativo?'':'opacity:.5'}">
         <span style="flex:1;font-size:13px;font-weight:700">${c.nome}${c.ativo?'':' (inativo)'}</span>
-        <button onclick="alternarClienteAtivo('${c.id}',${!c.ativo})" style="background:none;border:1px solid var(--border,#ccc);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:inherit">${c.ativo?'Desativar':'Reativar'}</button>
+        <button onclick="alternarClienteAtivo('${c.id}',${!c.ativo},'${c.nome.replace(/'/g,"\\'")}')" style="background:none;border:1px solid var(--border,#ccc);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:inherit">${c.ativo?'Desativar':'Reativar'}</button>
       </div>`).join('');
   }catch(e){ lista.textContent='Erro de conexão.'; }
 }
@@ -2135,10 +2159,17 @@ async function adicionarClienteAdmin(){
   }catch(e){ showToast('Erro de conexão.','#dc2626'); }
 }
 
-async function alternarClienteAtivo(id,novoStatus){
+async function alternarClienteAtivo(id,novoStatus,nome){
+  // Só pergunta ao DESATIVAR (a ação que tira o cliente da lista de escolha) — reativar
+  // não tem risco, então não precisa travar com confirmação.
+  if(!novoStatus){
+    const ok=confirm(`Desativar "${nome}"?\n\nEle vai sumir da lista de escolha do campo Obra/Projeto nos próximos RDOs. Os RDOs já criados com esse cliente NÃO são apagados nem afetados — continuam salvos normalmente.\n\nVocê pode reativar a qualquer momento aqui mesmo.`);
+    if(!ok) return;
+  }
   const supabaseClient=getSupabaseClient();
   try{
     await supabaseClient.from('clientes').update({ativo:novoStatus}).eq('id',id);
+    showToast(novoStatus?`✓ "${nome}" reativado.`:`✓ "${nome}" desativado.`,'#16a34a');
     carregarListaClientesAdmin();
     carregarClientes();
   }catch(e){ showToast('Erro ao atualizar cliente.','#dc2626'); }
@@ -2499,7 +2530,10 @@ function renderizarRdosDoDia(){
   keys.forEach(k=>{
     try{
       const d=JSON.parse(localStorage.getItem(k));
-      if(d?.header?.data===dataAtual) doDia.push({key:k,header:d.header});
+      // Só conta como "outro RDO do dia" quem já tem Obra escolhida — um rascunho ainda
+      // sem Obra definida (ex: RDO que acabou de começar, autosalvo de segurança ao clicar
+      // em Buscar/Novo) não deve aparecer como se fosse um RDO separado e confundir.
+      if(d?.header?.data===dataAtual && (d?.header?.obra||'').trim()) doDia.push({key:k,header:d.header});
     }catch(e){}
   });
 
