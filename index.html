@@ -1401,6 +1401,7 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
     <button class="btn" style="background:#c2410c;color:#fff" onclick="abrirProjetos()" title="Total de horas de cada projeto, do início até a conclusão, em qualquer status">📁 <span>Horas/Projeto</span></button>
     <button class="btn" style="background:#374151;color:#fff" onclick="abrirCheckIntegridade()" title="Verifica inconsistências que podem causar erro na contagem de horas">🩺 <span>Check</span></button>
     <button class="btn" style="background:#0a6080;color:#fff" onclick="abrirGerenciarClientes()" title="Adicionar/remover clientes da lista de Obra/Projeto">👥 <span>Clientes</span></button>
+    <button class="btn" style="background:#9d174d;color:#fff" onclick="abrirPainelExecutivo()" title="Visão geral de todos os encarregados, ou individual de cada um">🎯 <span>Executivo</span></button>
     </span>
     <span class="topbar-divider"></span>
     <button class="btn btn-save"    onclick="salvarRDO()">💾 <span>Salvar</span></button>
@@ -2136,6 +2137,166 @@ function onMudarClienteSelecionado(){
 }
 
 // ── PAINEL DO ADMIN: gerenciar clientes ──
+// ═══════════════════════════════════════════════════════════════════════
+// PAINEL EXECUTIVO (admin) — visão geral com a soma de cada encarregado lado
+// a lado, e visão individual completa de cada um ao clicar no nome dele.
+// ═══════════════════════════════════════════════════════════════════════
+
+// Varre todos os RDOs (já sincronizados do Supabase) e monta um resumo por
+// encarregado: quantos RDOs, quantas obras diferentes, e o total de horas
+// separado por status (Andamento, Extra Escopo, Concluído, Paralisado).
+function coletarResumoPorEncarregado(){
+  const porEnc={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    let d;
+    try{ d=JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
+    const h=d&&d.header;
+    if(!h||!h.data) continue;
+    const enc=(h.enc||'(SEM ENCARREGADO PREENCHIDO)').toUpperCase();
+    if(!porEnc[enc]) porEnc[enc]={nome:enc,rdos:new Set(),obras:new Set(),and:0,ext:0,conc:0,par:0,total:0,ultimaData:h.data,rdosDetalhe:[]};
+    const r=porEnc[enc];
+    r.rdos.add(k);
+    if(h.obra) r.obras.add(h.obra);
+    if(h.data>r.ultimaData) r.ultimaData=h.data;
+    let totalRDO=0;
+    (d.oses||[]).forEach((o,idx)=>{
+      if(!o.status||o.status==='sem') return;
+      let horasOSE=0;
+      (d.workers||[]).forEach(w=>{ horasOSE+=parseHrs((w.hrs||[])[idx]||''); });
+      if(horasOSE<=0) return;
+      totalRDO+=horasOSE;
+      r.total+=horasOSE;
+      if(o.status==='and') r.and+=horasOSE;
+      else if(o.status==='ext') r.ext+=horasOSE;
+      else if(o.status==='conc') r.conc+=horasOSE;
+      else if(o.status==='par') r.par+=horasOSE;
+    });
+    r.rdosDetalhe.push({key:k,data:h.data,obra:h.obra||'—',nrdo:h.nrdo||'—',disc:h.disc||'—',totalHoras:totalRDO});
+  }
+  return Object.values(porEnc).map(r=>({...r,rdos:r.rdos.size,obras:r.obras.size,rdosDetalhe:r.rdosDetalhe.sort((a,b)=>b.data.localeCompare(a.data))}));
+}
+
+async function abrirPainelExecutivo(){
+  if(!exigirAdmin()) return;
+  await sincronizarSeAdmin();
+  autoSilentSave();
+  document.getElementById('exec-modal')?.remove();
+  const ov=document.createElement('div');
+  ov.id='exec-modal';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:12px';
+  ov.innerHTML=`
+    <div style="background:var(--surface,#fff);color:var(--text,#111);width:100%;max-width:920px;height:88vh;border-radius:14px;display:flex;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.5)">
+      <div id="exec-conteudo" style="flex:1;overflow-y:auto;padding:18px;min-width:0"></div>
+      <div style="width:180px;flex-shrink:0;border-left:2px solid var(--border,#e5e5e5);background:var(--surface2,#f7f7f7);overflow-y:auto;padding:12px 8px">
+        <div style="font-size:10px;font-weight:900;text-transform:uppercase;color:var(--text3);padding:4px 6px 8px">Encarregados</div>
+        <button onclick="renderizarVisaoGeralExecutivo()" id="exec-btn-geral" class="exec-sidebar-btn" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:#9d174d;color:#fff;border-radius:8px;font-size:12px;font-weight:900;cursor:pointer;margin-bottom:6px">📊 Visão Geral</button>
+        <div id="exec-lista-encarregados"></div>
+        <button onclick="document.getElementById('exec-modal').remove()" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:transparent;color:var(--text3);border-radius:8px;font-size:11px;cursor:pointer;margin-top:14px">✕ Fechar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  renderizarVisaoGeralExecutivo();
+}
+
+function renderizarVisaoGeralExecutivo(){
+  const resumo=coletarResumoPorEncarregado().sort((a,b)=>b.total-a.total);
+
+  // Marca o botão "Visão Geral" como ativo na barra lateral
+  document.querySelectorAll('.exec-sidebar-btn').forEach(b=>b.style.background='transparent');
+  const btnGeral=document.getElementById('exec-btn-geral');
+  if(btnGeral) btnGeral.style.background='#9d174d';
+
+  document.getElementById('exec-lista-encarregados').innerHTML=resumo.map(r=>`
+    <button onclick="selecionarEncarregadoExecutivo('${r.nome.replace(/'/g,"\\'")}')" class="exec-sidebar-btn" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:transparent;color:var(--text);border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;margin-bottom:4px">👷 ${r.nome}<br><span style="font-weight:400;font-size:10px;opacity:.7">${fmt(r.total)}h · ${r.rdos} RDO(s)</span></button>
+  `).join('')||'<div style="font-size:11px;color:var(--text3);padding:6px">Nenhum RDO encontrado ainda.</div>';
+
+  const totalGeral=resumo.reduce((s,r)=>s+r.total,0);
+  const totalAnd=resumo.reduce((s,r)=>s+r.and,0);
+  const totalExt=resumo.reduce((s,r)=>s+r.ext,0);
+  const totalConc=resumo.reduce((s,r)=>s+r.conc,0);
+  const totalPar=resumo.reduce((s,r)=>s+r.par,0);
+  const totalRDOs=resumo.reduce((s,r)=>s+r.rdos,0);
+
+  document.getElementById('exec-conteudo').innerHTML=`
+    <div style="font-size:18px;font-weight:900;margin-bottom:2px">📊 Visão Geral — Todos os Encarregados</div>
+    <div style="font-size:11.5px;color:var(--text3);margin-bottom:16px">Soma de tudo que está sincronizado da nuvem até agora.</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px">
+      <div class="ee-card"><div class="v">${fmt(totalGeral)}</div><div class="l">Total H.H Geral</div></div>
+      <div class="ee-card"><div class="v" style="color:#1a52c8">${fmt(totalAnd)}</div><div class="l">Em Andamento</div></div>
+      <div class="ee-card"><div class="v" style="color:#158038">${fmt(totalExt)}</div><div class="l">Extra Escopo</div></div>
+      <div class="ee-card"><div class="v" style="color:#6830cc">${fmt(totalConc)}</div><div class="l">Concluído</div></div>
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="border-bottom:2px solid var(--border,#000);text-align:left">
+        <th style="padding:6px 8px">Encarregado</th>
+        <th style="padding:6px 8px;text-align:center">RDOs</th>
+        <th style="padding:6px 8px;text-align:center">Obras</th>
+        <th style="padding:6px 8px;text-align:right;color:#1a52c8">Andamento</th>
+        <th style="padding:6px 8px;text-align:right;color:#158038">Extra Escopo</th>
+        <th style="padding:6px 8px;text-align:right;color:#6830cc">Concluído</th>
+        <th style="padding:6px 8px;text-align:right;font-weight:900">Total H.H</th>
+      </tr></thead>
+      <tbody>
+        ${resumo.map(r=>`<tr style="border-bottom:1px solid var(--border,#eee);cursor:pointer" onclick="selecionarEncarregadoExecutivo('${r.nome.replace(/'/g,"\\'")}')">
+          <td style="padding:6px 8px;font-weight:800">👷 ${r.nome}</td>
+          <td style="padding:6px 8px;text-align:center">${r.rdos}</td>
+          <td style="padding:6px 8px;text-align:center">${r.obras}</td>
+          <td style="padding:6px 8px;text-align:right;color:#1a52c8">${fmt(r.and)}h</td>
+          <td style="padding:6px 8px;text-align:right;color:#158038">${fmt(r.ext)}h</td>
+          <td style="padding:6px 8px;text-align:right;color:#6830cc">${fmt(r.conc)}h</td>
+          <td style="padding:6px 8px;text-align:right;font-weight:900">${fmt(r.total)}h</td>
+        </tr>`).join('')}
+      </tbody>
+      <tfoot><tr style="border-top:2px solid var(--border,#000);font-weight:900">
+        <td style="padding:6px 8px">TOTAL GERAL</td>
+        <td style="padding:6px 8px;text-align:center">${totalRDOs}</td>
+        <td style="padding:6px 8px"></td>
+        <td style="padding:6px 8px;text-align:right;color:#1a52c8">${fmt(totalAnd)}h</td>
+        <td style="padding:6px 8px;text-align:right;color:#158038">${fmt(totalExt)}h</td>
+        <td style="padding:6px 8px;text-align:right;color:#6830cc">${fmt(totalConc)}h</td>
+        <td style="padding:6px 8px;text-align:right">${fmt(totalGeral)}h</td>
+      </tr></tfoot>
+    </table>
+    </div>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:10px">Toque no nome de um encarregado (na lista ao lado ou na tabela) pra ver o histórico completo de RDOs dele.</div>
+  `;
+}
+
+function selecionarEncarregadoExecutivo(nome){
+  const resumo=coletarResumoPorEncarregado();
+  const r=resumo.find(x=>x.nome===nome);
+  if(!r) return;
+
+  document.querySelectorAll('.exec-sidebar-btn').forEach(b=>b.style.background='transparent');
+  const btnGeral=document.getElementById('exec-btn-geral');
+  if(btnGeral) btnGeral.style.background='transparent';
+  // marca o botão dessa pessoa como ativo na lista lateral
+  Array.from(document.querySelectorAll('#exec-lista-encarregados .exec-sidebar-btn')).forEach(b=>{
+    if(b.textContent.includes(nome)) b.style.background='#9d174d';
+  });
+
+  document.getElementById('exec-conteudo').innerHTML=`
+    <div style="font-size:18px;font-weight:900;margin-bottom:2px">👷 ${r.nome}</div>
+    <div style="font-size:11.5px;color:var(--text3);margin-bottom:16px">${r.rdos} RDO(s) · ${r.obras} obra(s) diferente(s) · último lançamento em ${formatarDataBR(r.ultimaData)}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px">
+      <div class="ee-card"><div class="v">${fmt(r.total)}</div><div class="l">Total H.H</div></div>
+      <div class="ee-card"><div class="v" style="color:#1a52c8">${fmt(r.and)}</div><div class="l">Em Andamento</div></div>
+      <div class="ee-card"><div class="v" style="color:#158038">${fmt(r.ext)}</div><div class="l">Extra Escopo</div></div>
+      <div class="ee-card"><div class="v" style="color:#6830cc">${fmt(r.conc)}</div><div class="l">Concluído</div></div>
+    </div>
+    <div style="font-size:12px;font-weight:900;margin-bottom:6px">Histórico de RDOs</div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${r.rdosDetalhe.map(x=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border,#e5e5e5);border-radius:8px;font-size:12px">
+        <div><b>${formatarDataBR(x.data)}</b> — 🏭 ${x.obra} ${x.disc&&x.disc!=='—'?'· '+x.disc:''} <span style="opacity:.7">(${x.nrdo})</span></div>
+        <div style="font-weight:900;white-space:nowrap">${fmt(x.totalHoras)}h</div>
+      </div>`).join('')||'<div style="color:var(--text3);font-size:11px">Nenhum RDO com horas lançadas.</div>'}
+    </div>
+  `;
+}
+
 function abrirGerenciarClientes(){
   if(!exigirAdmin()) return;
   document.getElementById('clientes-modal')?.remove();
