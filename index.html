@@ -1744,6 +1744,10 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
           <button type="button" onclick="renderizarExtraEscopo()" style="background:#158038;color:#fff;border:2px solid #0d5228;padding:0 14px;font-size:12px;font-weight:900;cursor:pointer">🔍 Filtrar</button>
         </div>
       </div>
+      <div>
+        <label>Ver só de um encarregado (opcional)</label>
+        <select id="ee-encarregado" onchange="renderizarExtraEscopo()" style="width:100%"><option value="">— Todos os encarregados —</option></select>
+      </div>
       <div id="ee-resumo" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px"></div>
       <div id="ee-lista-wrap" style="max-height:380px;overflow-y:auto;border:2px solid #000;margin-top:4px;padding:6px"></div>
     </div>
@@ -1775,6 +1779,10 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
           <button type="button" onclick="renderizarAndamento()" style="background:#1a52c8;color:#fff;border:2px solid #0e3a9a;padding:0 14px;font-size:12px;font-weight:900;cursor:pointer">🔍 Filtrar</button>
         </div>
       </div>
+      <div>
+        <label>Ver só de um encarregado (opcional)</label>
+        <select id="an-encarregado" onchange="renderizarAndamento()" style="width:100%"><option value="">— Todos os encarregados —</option></select>
+      </div>
       <div id="an-resumo" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px"></div>
       <div id="an-lista-wrap" style="max-height:380px;overflow-y:auto;border:2px solid #000;margin-top:4px;padding:6px"></div>
     </div>
@@ -1802,15 +1810,19 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
         <div style="display:flex;gap:8px">
           <input type="date" id="pj-de" style="flex:1">
           <input type="date" id="pj-ate" style="flex:1">
-          <button type="button" onclick="renderizarProjetos()" style="background:#6830cc;color:#fff;border:2px solid #4a1e96;padding:0 14px;font-size:12px;font-weight:900;cursor:pointer">🔍 Filtrar</button>
+          <button type="button" onclick="renderizarProjetos()" style="background:#c2410c;color:#fff;border:2px solid #7c2d0a;padding:0 14px;font-size:12px;font-weight:900;cursor:pointer">🔍 Filtrar</button>
         </div>
+      </div>
+      <div>
+        <label>Ver só de um encarregado (opcional)</label>
+        <select id="pj-encarregado" onchange="renderizarProjetos()" style="width:100%"><option value="">— Todos os encarregados —</option></select>
       </div>
       <div id="pj-resumo" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px"></div>
       <div id="pj-lista-wrap" style="max-height:380px;overflow-y:auto;border:2px solid #000;margin-top:4px;padding:6px"></div>
     </div>
     <div class="multipdf-footer">
       <button class="multipdf-cancel" onclick="document.getElementById('projetos-modal').classList.remove('show')">Fechar</button>
-      <button class="multipdf-gerar" style="background:#6830cc" onclick="exportarProjetosExcel()">📥 Exportar Excel</button>
+      <button class="multipdf-gerar" style="background:#c2410c" onclick="exportarProjetosExcel()">📥 Exportar Excel</button>
     </div>
   </div>
 </div>
@@ -2046,6 +2058,27 @@ async function carregarClientes(){
   }
   const valorAtual=document.getElementById('h-obra')?.value||'';
   popularSelectObra(nomes,valorAtual);
+}
+
+// Lista de encarregados (só admin usa) — alimenta os filtros "ver só de um encarregado"
+// dentro de Extra Escopo, Andamento e Horas/Projeto. Vem da tabela perfis.
+let encarregadosCache=[];
+async function carregarEncarregados(){
+  if(!usuarioAtual||usuarioAtual.papel!=='admin_mestre') return;
+  const supabaseClient=getSupabaseClient();
+  if(!supabaseClient) return;
+  try{
+    const{data,error}=await supabaseClient.from('perfis').select('id,nome').eq('papel','encarregado').order('nome');
+    if(!error&&data) encarregadosCache=data;
+  }catch(e){console.error('carregarEncarregados error:',e);}
+}
+
+// Preenche um <select> de filtro por encarregado com "Todos" + cada nome cadastrado.
+function popularFiltroEncarregado(selectId){
+  const sel=document.getElementById(selectId);
+  if(!sel) return;
+  sel.innerHTML='<option value="">— Todos os encarregados —</option>'+
+    encarregadosCache.map(e=>`<option value="${(e.nome||'').toUpperCase()}">${e.nome}</option>`).join('');
 }
 
 function popularSelectObra(nomes,valorParaManter){
@@ -2394,6 +2427,7 @@ function exigirAdmin(){
 function iniciarAppAposLogin(){
   aplicarPermissoesPorPapel();
   carregarClientes();
+  carregarEncarregados();
   carregarListas();
   document.getElementById('h-data').value = hojeLocal();
   updateDiaSemana();
@@ -5496,6 +5530,7 @@ async function abrirExtraEscopo(){
                      // entra na soma — sem isso, o total podia ficar diferente do que está na tela
   document.getElementById('ee-de').value='';
   document.getElementById('ee-ate').value='';
+  popularFiltroEncarregado('ee-encarregado');
   renderizarExtraEscopo();
   document.getElementById('extra-escopo-modal').classList.add('show');
 }
@@ -5503,7 +5538,9 @@ async function abrirExtraEscopo(){
 function renderizarExtraEscopo(){
   const de=document.getElementById('ee-de').value||null;
   const ate=document.getElementById('ee-ate').value||null;
-  const dados=coletarDadosExtraEscopo(de,ate);
+  const encFiltro=document.getElementById('ee-encarregado')?.value||'';
+  let dados=coletarDadosExtraEscopo(de,ate);
+  if(encFiltro) dados=dados.filter(r=>r.encarregado===encFiltro);
 
   const totalHoras=dados.reduce((s,r)=>s+r.horas,0);
   const funcionariosUnicos=new Set(dados.map(r=>r.funcionario)).size;
@@ -5941,6 +5978,7 @@ async function abrirAndamento(){
   autoSilentSave(); // ESSENCIAL: garante que o Andamento lançado agora na tela entra na soma
   document.getElementById('an-de').value='';
   document.getElementById('an-ate').value='';
+  popularFiltroEncarregado('an-encarregado');
   renderizarAndamento();
   document.getElementById('andamento-modal').classList.add('show');
 }
@@ -5952,7 +5990,9 @@ function toggleAndamentoProjeto(elHeader){
 function renderizarAndamento(){
   const de=document.getElementById('an-de').value||null;
   const ate=document.getElementById('an-ate').value||null;
-  const dados=coletarDadosAndamento(de,ate);
+  const encFiltro=document.getElementById('an-encarregado')?.value||'';
+  let dados=coletarDadosAndamento(de,ate);
+  if(encFiltro) dados=dados.filter(r=>r.encarregado===encFiltro);
 
   const totalHoras=dados.reduce((s,r)=>s+r.horas,0);
   const funcionariosUnicos=new Set(dados.map(r=>r.funcionario)).size;
@@ -6207,6 +6247,7 @@ async function abrirProjetos(){
   autoSilentSave(); // ESSENCIAL: garante que as horas lançadas agora entram no total do projeto
   document.getElementById('pj-de').value='';
   document.getElementById('pj-ate').value='';
+  popularFiltroEncarregado('pj-encarregado');
   renderizarProjetos();
   document.getElementById('projetos-modal').classList.add('show');
 }
@@ -6214,7 +6255,9 @@ async function abrirProjetos(){
 function renderizarProjetos(){
   const de=document.getElementById('pj-de').value||null;
   const ate=document.getElementById('pj-ate').value||null;
-  const dados=coletarDadosProjeto(de,ate);
+  const encFiltro=document.getElementById('pj-encarregado')?.value||'';
+  let dados=coletarDadosProjeto(de,ate);
+  if(encFiltro) dados=dados.filter(r=>r.encarregado===encFiltro);
 
   const wrap=document.getElementById('pj-lista-wrap');
   if(!dados.length){
