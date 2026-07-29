@@ -1398,7 +1398,7 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
     <span id="ferramentas-admin-only" style="display:contents">
     <button class="btn" style="background:#158038;color:#fff" onclick="abrirExtraEscopo()" title="Controle consolidado de todo o Extra Escopo/Adicional registrado">🟢 <span>Extra Escopo</span></button>
     <button class="btn" style="background:#1a52c8;color:#fff" onclick="abrirAndamento()" title="Controle consolidado de horas por projeto (Em Andamento)">🔵 <span>Andamento</span></button>
-    <button class="btn" style="background:#6830cc;color:#fff" onclick="abrirProjetos()" title="Total de horas de cada projeto, do início até a conclusão, em qualquer status">📁 <span>Horas/Projeto</span></button>
+    <button class="btn" style="background:#c2410c;color:#fff" onclick="abrirProjetos()" title="Total de horas de cada projeto, do início até a conclusão, em qualquer status">📁 <span>Horas/Projeto</span></button>
     <button class="btn" style="background:#374151;color:#fff" onclick="abrirCheckIntegridade()" title="Verifica inconsistências que podem causar erro na contagem de horas">🩺 <span>Check</span></button>
     <button class="btn" style="background:#0a6080;color:#fff" onclick="abrirGerenciarClientes()" title="Adicionar/remover clientes da lista de Obra/Projeto">👥 <span>Clientes</span></button>
     </span>
@@ -5462,6 +5462,7 @@ function coletarDadosExtraEscopo(dataInicio,dataFim){
             data:h.data,
             dataFmt:formatarDataBR(h.data),
             obra:h.obra||'—',
+            encarregado:(h.enc||'—').toUpperCase(),
             ose:`OSE ${String(idx+1).padStart(2,'0')}`,
             servico:(o.name||'—').toUpperCase(),
             descricao:descTexto?descTexto.toUpperCase():'— (sem descrição preenchida no RDO) —',
@@ -5506,10 +5507,12 @@ function renderizarExtraEscopo(){
 
   const totalHoras=dados.reduce((s,r)=>s+r.horas,0);
   const funcionariosUnicos=new Set(dados.map(r=>r.funcionario)).size;
+  const encarregadosUnicos=new Set(dados.map(r=>r.encarregado)).size;
   const diasUnicos=new Set(dados.map(r=>r.data)).size;
 
   document.getElementById('ee-resumo').innerHTML=`
     <div class="ee-card"><div class="v">${fmt(totalHoras)}</div><div class="l">Total H.H Extra Escopo</div></div>
+    <div class="ee-card"><div class="v">${encarregadosUnicos}</div><div class="l">Encarregados envolvidos</div></div>
     <div class="ee-card"><div class="v">${funcionariosUnicos}</div><div class="l">Funcionários envolvidos</div></div>
     <div class="ee-card"><div class="v">${diasUnicos}</div><div class="l">Dias com Extra Escopo</div></div>
   `;
@@ -5525,7 +5528,7 @@ function renderizarExtraEscopo(){
   const grupos={};
   dados.forEach(r=>{
     const chave=`${r.data}|${r.ose}`;
-    if(!grupos[chave]) grupos[chave]={chave,data:r.data,obra:r.obra,ose:r.ose,servico:r.servico,descricao:r.descricao,trabalhadores:[]};
+    if(!grupos[chave]) grupos[chave]={chave,data:r.data,obra:r.obra,encarregado:r.encarregado,ose:r.ose,servico:r.servico,descricao:r.descricao,trabalhadores:[]};
     grupos[chave].trabalhadores.push({nome:r.funcionario,funcao:r.funcao,horas:r.horas});
   });
   extraEscopoGruposAtuais=grupos; // pros botões de deletar/compartilhar por dia e por funcionário
@@ -5560,7 +5563,7 @@ function renderizarExtraEscopo(){
       return `<div class="ee-dia">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
           <div>
-            <b>${dd}/${m}/${y}</b> — ${g.obra} — <span style="color:#158038;font-weight:900">${g.ose}</span><br>
+            <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="color:#158038;font-weight:900">${g.ose}</span><br>
             <span style="color:var(--text2)">${g.descricao}</span><br>
             ${trabList}
           </div>
@@ -5917,6 +5920,7 @@ function coletarDadosAndamento(dataInicio,dataFim){
             data:h.data,
             dataFmt:formatarDataBR(h.data),
             obra:h.obra||'—',
+            encarregado:(h.enc||'—').toUpperCase(),
             ose:`OSE ${String(idx+1).padStart(2,'0')}`,
             servico:(o.name||'(SEM NOME DE PROJETO PREENCHIDO)').toUpperCase(),
             descricao:descTexto?descTexto.toUpperCase():'— (sem descrição preenchida no RDO) —',
@@ -5952,11 +5956,13 @@ function renderizarAndamento(){
 
   const totalHoras=dados.reduce((s,r)=>s+r.horas,0);
   const funcionariosUnicos=new Set(dados.map(r=>r.funcionario)).size;
+  const encarregadosUnicos=new Set(dados.map(r=>r.encarregado)).size;
   const projetosUnicos=new Set(dados.map(r=>r.servico)).size;
 
   document.getElementById('an-resumo').innerHTML=`
     <div class="ee-card"><div class="v" style="color:#1a52c8">${fmt(totalHoras)}</div><div class="l">Total H.H Em Andamento</div></div>
     <div class="ee-card"><div class="v" style="color:#1a52c8">${projetosUnicos}</div><div class="l">Projetos diferentes</div></div>
+    <div class="ee-card"><div class="v" style="color:#1a52c8">${encarregadosUnicos}</div><div class="l">Encarregados envolvidos</div></div>
     <div class="ee-card"><div class="v" style="color:#1a52c8">${funcionariosUnicos}</div><div class="l">Funcionários envolvidos</div></div>
   `;
 
@@ -5972,7 +5978,7 @@ function renderizarAndamento(){
   const dias={};
   dados.forEach(r=>{
     const chave=`${r.data}|${r.ose}`;
-    if(!dias[chave]) dias[chave]={chave,data:r.data,obra:r.obra,ose:r.ose,servico:r.servico,descricao:r.descricao,trabalhadores:[]};
+    if(!dias[chave]) dias[chave]={chave,data:r.data,obra:r.obra,encarregado:r.encarregado,ose:r.ose,servico:r.servico,descricao:r.descricao,trabalhadores:[]};
     dias[chave].trabalhadores.push({nome:r.funcionario,funcao:r.funcao,horas:r.horas});
   });
   andamentoGruposAtuais=dias;
@@ -6005,7 +6011,7 @@ function renderizarAndamento(){
       return `<div class="an-dia">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
           <div>
-            <b>${dd}/${m}/${y}</b> — ${g.obra} — <span style="color:#1a52c8;font-weight:900">${g.ose}</span><br>
+            <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="color:#1a52c8;font-weight:900">${g.ose}</span><br>
             <span style="color:var(--text2)">${g.descricao}</span><br>
             ${trabList}
           </div>
@@ -6188,7 +6194,7 @@ function coletarDadosProjeto(dataInicio,dataFim){
       let horasNoDia=0;
       (d.workers||[]).forEach(w=>{ horasNoDia+=parseHrs((w.hrs||[])[idx]||''); });
       if(horasNoDia>0){
-        registros.push({data:h.data,dataFmt:formatarDataBR(h.data),obra:h.obra||'—',projeto:nomeProjeto.toUpperCase(),status:o.status,horas:horasNoDia});
+        registros.push({data:h.data,dataFmt:formatarDataBR(h.data),obra:h.obra||'—',encarregado:(h.enc||'—').toUpperCase(),projeto:nomeProjeto.toUpperCase(),status:o.status,horas:horasNoDia});
       }
     });
   }
@@ -6217,12 +6223,15 @@ function renderizarProjetos(){
     return;
   }
 
-  // Agrupa por nome de projeto, somando todas as horas independente do status
+  // Agrupa por nome de projeto, somando todas as horas independente do status — e dentro
+  // de cada projeto, soma também por Obra e por Encarregado, pra o admin ver claramente
+  // de onde (qual obra) e de quem (qual encarregado) vieram as horas somadas.
   const projetos={};
   dados.forEach(r=>{
-    if(!projetos[r.projeto]) projetos[r.projeto]={nome:r.projeto,obra:r.obra,totalHoras:0,primeiraData:r.data,ultimaData:r.data,concluidoEm:null,statusAtual:r.status};
+    if(!projetos[r.projeto]) projetos[r.projeto]={nome:r.projeto,obra:r.obra,totalHoras:0,primeiraData:r.data,ultimaData:r.data,concluidoEm:null,statusAtual:r.status,porEncarregado:{}};
     const p=projetos[r.projeto];
     p.totalHoras+=r.horas;
+    p.porEncarregado[r.encarregado]=(p.porEncarregado[r.encarregado]||0)+r.horas;
     if(r.data<p.primeiraData) p.primeiraData=r.data;
     if(r.data>=p.ultimaData){ p.ultimaData=r.data; p.statusAtual=r.status; } // status do dia mais recente
     if(r.status==='conc') p.concluidoEm = !p.concluidoEm || r.data>p.concluidoEm ? r.data : p.concluidoEm;
@@ -6233,9 +6242,9 @@ function renderizarProjetos(){
   const totalGeral=dados.reduce((s,r)=>s+r.horas,0);
   const concluidos=listaProjetos.filter(p=>p.concluidoEm).length;
   document.getElementById('pj-resumo').innerHTML=`
-    <div class="ee-card"><div class="v" style="color:#6830cc">${fmt(totalGeral)}</div><div class="l">Total H.H (todos os projetos)</div></div>
-    <div class="ee-card"><div class="v" style="color:#6830cc">${listaProjetos.length}</div><div class="l">Projetos no período</div></div>
-    <div class="ee-card"><div class="v" style="color:#6830cc">${concluidos}</div><div class="l">Já concluídos</div></div>
+    <div class="ee-card"><div class="v" style="color:#c2410c">${fmt(totalGeral)}</div><div class="l">Total H.H (todos os projetos)</div></div>
+    <div class="ee-card"><div class="v" style="color:#c2410c">${listaProjetos.length}</div><div class="l">Projetos no período</div></div>
+    <div class="ee-card"><div class="v" style="color:#c2410c">${concluidos}</div><div class="l">Já concluídos</div></div>
   `;
 
   wrap.innerHTML=listaProjetos.map(p=>{
@@ -6244,10 +6253,17 @@ function renderizarProjetos(){
     const statusHtml = p.concluidoEm
       ? `<span class="pj-status concluido">✅ Concluído em ${p.concluidoEm.split('-').reverse().join('/')}</span>`
       : `<span class="pj-status aberto">${STATUS_LABEL_PROJETO[p.statusAtual]||p.statusAtual}</span>`;
+    // Lista de quem contribuiu horas nesse projeto (pode ser mais de um encarregado,
+    // se a obra teve mais de uma pessoa responsável ao longo do tempo)
+    const encarregadosHtml=Object.entries(p.porEncarregado)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([enc,h])=>`👷 ${enc}: <b>${fmt(h)}h</b>`)
+      .join(' · ');
     return `<div class="pj-card">
       <div>
         <div class="pj-nome">📁 ${p.nome}</div>
-        <div class="pj-meta">${p.obra} · de ${id}/${im}/${iy} até ${ud}/${um}/${uy} ${statusHtml}</div>
+        <div class="pj-meta" style="font-weight:800">🏭 ${p.obra} · de ${id}/${im}/${iy} até ${ud}/${um}/${uy} ${statusHtml}</div>
+        <div class="pj-meta" style="margin-top:2px">${encarregadosHtml}</div>
       </div>
       <div class="pj-total">${fmt(p.totalHoras)}h</div>
     </div>`;
