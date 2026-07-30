@@ -1473,7 +1473,7 @@ input.login-input,
         <option value="PINTURA">PINTURA</option>
         <option value="TÉC. SEGURANÇA">TÉC. SEGURANÇA</option>
       </select></div>
-      <div class="hfield" style="border-right:none"><label>Encarregado</label><textarea id="h-enc" rows="1" placeholder="Nome completo" oninput="autoGrowTA(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></textarea></div>
+      <div class="hfield" style="border-right:none"><label>Encarregado</label><select id="h-enc" onchange="onMudarEncarregadoSelecionado()"><option value="">— Selecione —</option></select></div>
     </div>
   </div>
 
@@ -2090,25 +2090,62 @@ async function carregarClientes(){
   popularSelectObra(nomes,valorAtual);
 }
 
-// Lista de encarregados (só admin usa) — alimenta os filtros "ver só de um encarregado"
-// dentro de Extra Escopo, Andamento e Horas/Projeto. Vem da tabela perfis.
+// Lista de nomes de encarregados — usada tanto no filtro do admin (Extra Escopo,
+// Andamento, Horas/Projeto) quanto no campo Encarregado do próprio RDO (pra ninguém
+// digitar o nome errado e "criar" uma pessoa fantasma na contagem do Executivo).
 let encarregadosCache=[];
 async function carregarEncarregados(){
-  if(!usuarioAtual||usuarioAtual.papel!=='admin_mestre') return;
+  if(!usuarioAtual) return;
   const supabaseClient=getSupabaseClient();
   if(!supabaseClient) return;
   try{
-    const{data,error}=await supabaseClient.from('perfis').select('id,nome').eq('papel','encarregado').order('nome');
-    if(!error&&data) encarregadosCache=data;
+    const{data,error}=await supabaseClient.rpc('nomes_encarregados');
+    if(!error&&data) encarregadosCache=data.map(r=>({nome:r.nome}));
   }catch(e){console.error('carregarEncarregados error:',e);}
+  popularSelectEncarregado();
 }
 
-// Preenche um <select> de filtro por encarregado com "Todos" + cada nome cadastrado.
+// Preenche um <select> de filtro por encarregado (usado pelo admin) com "Todos" + cada
+// nome cadastrado.
 function popularFiltroEncarregado(selectId){
   const sel=document.getElementById(selectId);
   if(!sel) return;
   sel.innerHTML='<option value="">— Todos os encarregados —</option>'+
     encarregadosCache.map(e=>`<option value="${(e.nome||'').toUpperCase()}">${e.nome}</option>`).join('');
+}
+
+// Preenche o campo Encarregado do próprio RDO — pré-seleciona automaticamente o nome de
+// quem está logado (mais prático), mas deixa trocar se precisar (ex: admin preenchendo
+// em nome de outra pessoa). Compara de forma tolerante, mesmo esquema da Obra.
+function popularSelectEncarregado(){
+  const sel=document.getElementById('h-enc');
+  if(!sel) return;
+  const valorAtual=sel.value;
+  sel.innerHTML='<option value="">— Selecione —</option>'+
+    encarregadosCache.map(e=>`<option value="${(e.nome||'').toUpperCase()}">${e.nome}</option>`).join('');
+  if(valorAtual){
+    setEncarregadoSelecionado(valorAtual);
+  }else if(usuarioAtual?.nome&&!sel.value){
+    setEncarregadoSelecionado(usuarioAtual.nome);
+  }
+}
+
+function setEncarregadoSelecionado(valor){
+  const sel=document.getElementById('h-enc');
+  if(!sel||!valor) return;
+  const existente=[...sel.options].find(o=>normalizarObra(o.value)===normalizarObra(valor));
+  if(existente){
+    sel.value=existente.value;
+  }else{
+    const opt=document.createElement('option');
+    opt.value=valor; opt.textContent=valor+' (não cadastrado)';
+    sel.appendChild(opt);
+    sel.value=valor;
+  }
+}
+
+function onMudarEncarregadoSelecionado(){
+  atualizarBannerObra();
 }
 
 function popularSelectObra(nomes,valorParaManter){
@@ -4028,7 +4065,7 @@ function restaurarEstadoCompleto(d){
   else document.getElementById('h-nrdo').value=gerarProximoNRDO(h.obra);
   if(h.data){document.getElementById('h-data').value=h.data;updateDiaSemana();}
   if(h.obra)setObraSelecionada(h.obra);
-  if(h.enc)document.getElementById('h-enc').value=h.enc;
+  if(h.enc)setEncarregadoSelecionado(h.enc);
   if(h.disc)setDiscSelecionada(h.disc);
   if(d.oses){
     d.oses.forEach((o,idx)=>{
@@ -4110,7 +4147,7 @@ function aplicarModeloNovoDia(d,proximoNRDO,manterStatus=true,dataAlvo=null,mant
   document.getElementById('h-data').value=dataAlvo||hojeLocal();
   updateDiaSemana();
   if(h.obra) setObraSelecionada(h.obra);
-  if(h.enc)  document.getElementById('h-enc').value=h.enc;
+  if(h.enc)  setEncarregadoSelecionado(h.enc);
   if(h.disc) setDiscSelecionada(h.disc);
 
   if(d.oses){
