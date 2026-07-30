@@ -90,12 +90,12 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
   background:var(--hbg-solid);
   padding:8px 16px;
   min-height:52px;
-  display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;
+  display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:nowrap;
   position:sticky;top:0;z-index:200;
   border-bottom:3px solid var(--accent);
   box-shadow:0 4px 20px rgba(0,0,0,.6)
 }
-.topbar-left{display:flex;align-items:center;gap:12px;min-width:0;height:100%}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0;height:100%;flex-shrink:0}
 .topbar-logo{height:32px;width:auto;background:#fff;padding:3px 7px;border-radius:4px;display:block;flex-shrink:0}
 .topbar-brand{display:flex;flex-direction:column;line-height:1.1;min-width:0;flex-shrink:0}
 .topbar-brand-name{font-size:12px;font-weight:900;letter-spacing:.5px;color:#fff}
@@ -103,7 +103,7 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
 .topbar-divider{width:1px;height:28px;background:rgba(255,255,255,.15);flex-shrink:0}
 .topbar-title{color:#fff;font-size:13px;font-weight:900;letter-spacing:.5px;line-height:1.1}
 .topbar-title small{font-size:8px;font-weight:500;opacity:.55;display:block;letter-spacing:1px}
-.topbar-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.topbar-actions{display:flex;gap:6px;flex-wrap:nowrap;align-items:center;overflow-x:auto;overflow-y:hidden;flex-shrink:1;min-width:0}
 .topbar-actions .topbar-divider{margin:0 2px}
 .btn{
   padding:6px 10px;border:1.5px solid rgba(255,255,255,.15);cursor:pointer;
@@ -847,12 +847,13 @@ input.login-input,
    MOBILE
    ══════════════════════════════════════ */
 @media(max-width:600px){
-  .topbar{padding:6px 14px 6px 8px;min-height:48px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden}
+  .topbar{padding:6px 10px 6px 8px;min-height:60px;flex-wrap:nowrap}
+  .topbar-actions{overflow-x:auto;overflow-y:hidden}
   .topbar-actions{flex-wrap:nowrap}
   .topbar-title{display:none}
   .topbar-brand-tag{display:none}
-  .btn{padding:7px 8px;font-size:9px;gap:3px}
-  .btn span{display:none}
+  .btn{padding:6px 5px;font-size:17px;gap:1px;flex-direction:column;min-width:54px;line-height:1.1;flex-shrink:0}
+  .btn span{display:block;font-size:7.5px;font-weight:800;white-space:nowrap;letter-spacing:.2px}
   .page{padding:8px 6px}
   .rdo-banner{padding:10px 12px}
   .banner-logo{height:36px}
@@ -907,6 +908,8 @@ input.login-input,
   .summary-grid{grid-template-columns:repeat(2,1fr)}
   .novo-rdo-dia-btn{font-size:10px}
   .multipdf-footer button{min-width:100%}
+  .btn{min-width:48px;font-size:15px;padding:5px 4px}
+  .btn span{font-size:7px}
 }
 
 /* ══════════════════════════════════════
@@ -1544,6 +1547,7 @@ input.login-input,
   <!-- OSE CARDS -->
   <div class="section-title">📋 ORDENS DE SERVIÇO — DETALHAMENTO E STATUS</div>
   <div class="ose-grid" id="ose-grid"></div>
+  <button type="button" id="btn-adicionar-ose" onclick="revelarProximaOSE()" class="btn-add-row" style="margin:8px 0">➕ Adicionar OSE (1/6)</button>
 
   <!-- RESUMO -->
   <div class="summary-card">
@@ -2813,7 +2817,7 @@ function iniciarAppAposLogin(){
   document.getElementById('h-data').value = hojeLocal();
   updateDiaSemana();
   document.getElementById('h-data').addEventListener('change',()=>{updateDiaSemana();renderizarRdosDoDia();renderizarObrasParadas();});
-  buildWorkersTable(18);
+  buildWorkersTable(1);
   buildOSECards();
   carregarRDO();
   recalcAll();
@@ -3378,10 +3382,37 @@ function renumerarLinhasVisiveis(){
 }
 
 // ── OSE CARDS ──
+// Controla quantas OSEs aparecem na tela — começa só com 1 (a maioria dos RDOs usa
+// só 1 ou 2), e vai revelando mais conforme a pessoa precisar. As 6 continuam existindo
+// por trás (estrutura de dados, banco, PDF, Excel — nada disso muda), é só visual.
+let oseVisiveisCount=1;
+
 function buildOSECards(){
+  oseVisiveisCount=1; // toda vez que a tela é remontada (RDO novo), volta a mostrar só 1
   const grid=document.getElementById('ose-grid');
   grid.innerHTML='';
-  for(let o=1;o<=NUM_OSE;o++) grid.appendChild(makeOSECard(o));
+  for(let o=1;o<=NUM_OSE;o++){
+    const card=makeOSECard(o);
+    if(o>oseVisiveisCount) card.style.display='none';
+    grid.appendChild(card);
+  }
+  atualizarBotaoAdicionarOSE();
+}
+
+// Mostra a próxima OSE escondida (2, depois 3, até a 6ª).
+function revelarProximaOSE(){
+  if(oseVisiveisCount>=NUM_OSE) return;
+  oseVisiveisCount++;
+  const card=document.getElementById(`ose-card-${oseVisiveisCount}`);
+  if(card) card.style.display='';
+  atualizarBotaoAdicionarOSE();
+}
+
+function atualizarBotaoAdicionarOSE(){
+  const btn=document.getElementById('btn-adicionar-ose');
+  if(!btn) return;
+  if(oseVisiveisCount>=NUM_OSE){ btn.style.display='none'; }
+  else{ btn.style.display=''; btn.textContent=`➕ Adicionar OSE (${oseVisiveisCount}/${NUM_OSE})`; }
 }
 
 function makeOSECard(o){
@@ -3454,6 +3485,14 @@ function updateOSEStatus(o){
   const val=sel.value;
   card.className=`ose-card s-${val}`;
   oseStatus[o]=val;
+  // Se essa OSE tem status de verdade (não é "sem atividade") e ainda estava escondida
+  // (ex: abrindo um RDO salvo que usava mais OSEs), revela ela e as anteriores também —
+  // nunca esconde dado real, só o que realmente está vazio.
+  if(val!=='sem'&&o>oseVisiveisCount){
+    oseVisiveisCount=o;
+    for(let i=1;i<=o;i++){ const c=document.getElementById(`ose-card-${i}`); if(c) c.style.display=''; }
+    atualizarBotaoAdicionarOSE();
+  }
   // Atualiza cor dos inputs da coluna e do rodapé
   colorizeOseColumn(o,val);
   // Atualiza a cor da caixinha desse OSE no Resumo Geral do Dia, pra acompanhar o
@@ -3941,6 +3980,14 @@ function restaurarEstadoCompleto(d){
       if(dEl)dEl.innerHTML=o.desc||''; // innerHTML preserva a formatação rica
       if(rEl)rEl.value=o.resp||'';
       updateSummaryOseLabel(n);
+      // Rede de segurança: se por algum motivo essa OSE tem nome/descrição preenchidos
+      // mas o status ficou "sem atividade" (raro, mas possível em RDO bem antigo), revela
+      // ela mesmo assim — nunca esconder um dado que já foi preenchido de verdade.
+      if(n>oseVisiveisCount&&((o.name||'').trim()||(o.desc||'').trim())){
+        oseVisiveisCount=n;
+        for(let i=1;i<=n;i++){ const c=document.getElementById(`ose-card-${i}`); if(c) c.style.display=''; }
+        atualizarBotaoAdicionarOSE();
+      }
     });
   }
   if(d.workers&&d.workers.length){
@@ -4034,7 +4081,7 @@ function aplicarModeloNovoDia(d,proximoNRDO,manterStatus=true,dataAlvo=null,mant
       restoreRow(wZerado,rowCounter);
     });
   } else {
-    buildWorkersTable(18);
+    buildWorkersTable(1);
   }
 
   recalcAll();
@@ -4226,7 +4273,7 @@ function _criarRDOEmBranco(mensagemToast,focarObra){
   nrdoEditadoManualmente=false;
   for(let o=1;o<=NUM_OSE;o++){oseStatus[o]='sem';}
   buildOSECards();
-  buildWorkersTable(18);
+  buildWorkersTable(1);
   recalcAll();
   showToast(mensagemToast,'#1457c8');
   renderizarRdosDoDia();renderizarObrasParadas();
