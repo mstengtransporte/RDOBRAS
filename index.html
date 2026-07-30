@@ -1403,6 +1403,7 @@ input.login-input,
     <button class="btn" style="background:#0a7060;color:#fff" onclick="abrirFrases()">💬 <span>Frases</span></button>
     <button class="btn" id="btn-rel-periodo" style="background:#6030bb;color:#fff" onclick="abrirMultiPDF()">📑 <span>Rel.Período</span></button>
     <button class="btn" style="background:#374151;color:#fff" onclick="abrirBackup()">🗄️ <span>Backup</span></button>
+    <button class="btn" style="background:#dc2626;color:#fff" onclick="fazerLogout()" title="Sair da conta">🚪 <span>Sair</span></button>
     <span class="topbar-divider" id="divisor-ferramentas-admin"></span>
     <span id="ferramentas-admin-only" style="display:contents">
     <button class="btn" style="background:#158038;color:#fff" onclick="abrirExtraEscopo()" title="Controle consolidado de todo o Extra Escopo/Adicional registrado">🟢 <span>Extra Escopo</span></button>
@@ -2113,8 +2114,11 @@ function popularSelectObra(nomes,valorParaManter){
     sel.appendChild(opt);
   });
   // Se o valor atual (ex: RDO antigo/salvo) não está na lista oficial, adiciona ele
-  // mesmo assim — pra não sumir/zerar o campo de um RDO já existente.
-  if(valorParaManter&&!nomes.includes(valorParaManter)){
+  // mesmo assim — pra não sumir/zerar o campo de um RDO já existente. Compara de forma
+  // tolerante (ignora acento, pontuação, maiúscula/minúscula), pra "Nouryon/Itupeva."
+  // (RDO antigo, com ponto e sem acento) não duplicar com "NOURYON/ITUPEVA" cadastrado.
+  const jaExisteTolerante=valorParaManter&&nomes.some(n=>normalizarObra(n)===normalizarObra(valorParaManter));
+  if(valorParaManter&&!jaExisteTolerante){
     const opt=document.createElement('option');
     opt.value=valorParaManter; opt.textContent=valorParaManter+' (não cadastrado)';
     sel.appendChild(opt);
@@ -2122,7 +2126,14 @@ function popularSelectObra(nomes,valorParaManter){
   const optOutro=document.createElement('option');
   optOutro.value='__outro__'; optOutro.textContent='➕ Cliente novo (avisar admin)';
   sel.appendChild(optOutro);
-  sel.value=valorParaManter||'';
+  // Se bateu de forma tolerante, usa a versão OFICIAL cadastrada em vez do texto antigo
+  // digitado diferente — assim o RDO antigo passa a ficar padronizado também.
+  if(jaExisteTolerante){
+    const oficial=nomes.find(n=>normalizarObra(n)===normalizarObra(valorParaManter));
+    sel.value=oficial;
+  }else{
+    sel.value=valorParaManter||'';
+  }
 }
 
 // Garante que existe uma <option> pro valor salvo antes de selecioná-lo (usado ao
@@ -2130,13 +2141,16 @@ function popularSelectObra(nomes,valorParaManter){
 function setObraSelecionada(valor){
   const sel=document.getElementById('h-obra');
   if(!sel||!valor) return;
-  const existe=[...sel.options].some(o=>o.value===valor);
-  if(!existe){
+  // Comparação tolerante — mesmo motivo do popularSelectObra acima.
+  const existente=[...sel.options].find(o=>normalizarObra(o.value)===normalizarObra(valor));
+  if(existente){
+    sel.value=existente.value; // usa a versão já cadastrada, padronizada
+  }else{
     const opt=document.createElement('option');
     opt.value=valor; opt.textContent=valor;
     sel.insertBefore(opt,sel.lastElementChild); // antes do "➕ Cliente novo"
+    sel.value=valor;
   }
-  sel.value=valor;
   atualizarBannerObra();
 }
 
@@ -2382,6 +2396,18 @@ async function adicionarClienteAdmin(){
   const input=document.getElementById('novo-cliente-input');
   const nome=input.value.trim().toUpperCase();
   if(!nome){ showToast('Digite o nome do cliente.','#d97706'); return; }
+
+  // Avisa se já existe um cliente MUITO parecido (só diferença de acento/pontuação/espaço)
+  // — evita cadastrar "SYENSQO/PAULINIA" e depois "SYENSQO/PAULÍNIA" como se fossem dois
+  // clientes diferentes só por esquecimento de acento na hora de digitar.
+  let cacheAtual=[];
+  try{ cacheAtual=JSON.parse(localStorage.getItem(CHAVE_CACHE_CLIENTES)||'[]'); }catch(e){}
+  const parecido=cacheAtual.find(n=>normalizarObra(n)===normalizarObra(nome)&&n!==nome);
+  if(parecido){
+    const prosseguir=confirm(`Já existe um cliente muito parecido cadastrado: "${parecido}"\n\nVocê está tentando cadastrar: "${nome}"\n\nSe for a mesma obra, cancele e use o nome que já existe. Se for realmente uma obra diferente, pode continuar.\n\nCadastrar mesmo assim?`);
+    if(!prosseguir) return;
+  }
+
   const supabaseClient=getSupabaseClient();
   try{
     const{error}=await supabaseClient.from('clientes').insert({nome});
@@ -2605,6 +2631,20 @@ function gerarRdoId(){
 }
 // Monta a chave de armazenamento: com ID quando existe (RDO novo), ou só a data pra
 // RDOs salvos antes dessa mudança (mantém compatibilidade com o que já estava salvo).
+// Compara nomes de Obra de forma "tolerante" — ignora acento, vírgula, ponto, espaço
+// duplo e maiúscula/minúscula. Sem isso, "SYENSQO/PAULÍNIA" (com acento) e
+// "SYENSQO/PAULINIA" (sem acento) contariam como obras DIFERENTES por engano, gerando
+// numeração e cadastro de cliente duplicados só por causa de uma diferença de digitação
+// que não muda o significado. Mantém a "/" (separador Cliente/Cidade, que importa).
+function normalizarObra(texto){
+  return (texto||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos (á→a, ç→c, ã→a...)
+    .toUpperCase()
+    .replace(/[.,;:!?'"()]/g,'')                      // remove pontuação comum
+    .replace(/\s+/g,' ')                               // colapsa espaços duplicados
+    .trim();
+}
+
 function chaveRDO(data){
   const d=data||'draft';
   return rdoAtualId ? `rdo-${d}__${rdoAtualId}` : `rdo-${d}`;
@@ -2719,7 +2759,7 @@ function atualizarDatalistNomesProjetos(){
 // o próprio RDO que está sendo editado agora, senão salvar de novo o mesmo RDO acusaria
 // "duplicado" dele com ele mesmo). Devolve a chave do RDO conflitante, ou null se estiver livre.
 function acharConflitoDeNRDO(obra,nrdo,chaveAtual){
-  const obraChave=(obra||'').trim().toUpperCase();
+  const obraChave=normalizarObra(obra);
   const nrdoChave=(nrdo||'').trim().toUpperCase();
   if(!obraChave||!nrdoChave) return null;
   for(let i=0;i<localStorage.length;i++){
@@ -2729,7 +2769,7 @@ function acharConflitoDeNRDO(obra,nrdo,chaveAtual){
     try{
       const d=JSON.parse(localStorage.getItem(k));
       const h=d?.header||{};
-      if((h.obra||'').trim().toUpperCase()===obraChave && (h.nrdo||'').trim().toUpperCase()===nrdoChave){
+      if(normalizarObra(h.obra)===obraChave && (h.nrdo||'').trim().toUpperCase()===nrdoChave){
         return k;
       }
     }catch(e){}
@@ -2738,15 +2778,15 @@ function acharConflitoDeNRDO(obra,nrdo,chaveAtual){
 }
 
 function gerarProximoNRDO(obra){
-  const obraChave=(obra||'').trim().toUpperCase();
+  const obraChave=normalizarObra(obra);
   let maior=0;
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||k==='rdo-last-key'||k==='rdo-names-list'||k==='rdo-funcs-list'||k==='rdo-theme') continue;
     try{
       const d=JSON.parse(localStorage.getItem(k));
-      const obraRdo=(d?.header?.obra||'').trim().toUpperCase();
-      if(obraRdo!==obraChave) continue; // só conta RDOs da MESMA obra
+      const obraRdo=normalizarObra(d?.header?.obra);
+      if(obraRdo!==obraChave) continue; // só conta RDOs da MESMA obra (ignora acento/pontuação)
       const n=d?.header?.nrdo||'';
       // extrai número do padrão RDO-001 ou 001 etc
       const m=n.match(/(\d+)/);
@@ -3539,49 +3579,65 @@ function travarAcao(nome,duracaoMs=1200){
   return true;
 }
 
-// Verifica na nuvem se o Nº RDO + Obra que acabou de ser salvo já existe em outro RDO
-// (de outro encarregado, que este aparelho não tem como ver localmente). Usa uma função
-// do banco que só devolve Obra+Número+Data — nunca conteúdo de RDO de outra pessoa.
-async function verificarConflitoNaNuvem(obra,nrdo,chaveAtual){
+
+// Calcula o próximo número disponível pra essa obra, olhando local E nuvem, ignorando
+// o PRÓPRIO RDO que está sendo salvo agora (senão o número subiria sozinho a cada
+// salvamento do mesmo RDO, mesmo sem conflito nenhum com ninguém).
+async function resolverNumeroSemConflito(obra,chaveAtual){
+  const obraChave=normalizarObra(obra);
+  if(!obraChave) return null;
+  let maior=0;
+
+  // 1) Local — mesma obra, ignorando a própria chave
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)||k===chaveAtual) continue;
+    try{
+      const d=JSON.parse(localStorage.getItem(k));
+      if(normalizarObra(d?.header?.obra)!==obraChave) continue;
+      const m=(d?.header?.nrdo||'').match(/(\d+)/);
+      if(m){ const v=parseInt(m[1],10); if(v>maior) maior=v; }
+    }catch(e){}
+  }
+
+  // 2) Nuvem — todos os RDOs de todos os encarregados nessa obra, ignorando a própria chave
   const supabaseClient=getSupabaseClient();
-  if(!supabaseClient||!usuarioAtual||!obra||!nrdo) return;
-  try{
-    const{data,error}=await supabaseClient.rpc('numeros_rdo_por_obra');
-    if(error||!data) return;
-    const obraNorm=(obra||'').trim().toUpperCase();
-    const nrdoNorm=(nrdo||'').trim().toUpperCase();
-    const conflitos=data.filter(r=>
-      (r.obra||'').trim().toUpperCase()===obraNorm &&
-      (r.nrdo||'').trim().toUpperCase()===nrdoNorm
-    );
-    // Se aparecer mais de 1 RDO com essa combinação (o próprio + outro), avisa —
-    // isso pega o caso de outro encarregado ter usado o mesmo número sem saber.
-    if(conflitos.length>1){
-      showToast(`⚠️ Atenção: o Nº "${nrdo}" da obra "${obra}" também está sendo usado por outro RDO na nuvem (possivelmente outro encarregado). Confira e ajuste se precisar.`,'#d97706');
-    }
-  }catch(e){console.error('verificarConflitoNaNuvem error:',e);}
+  if(supabaseClient&&usuarioAtual){
+    try{
+      const{data,error}=await supabaseClient.rpc('numeros_rdo_por_obra');
+      if(!error&&data){
+        data.forEach(r=>{
+          if(r.rdo_key===chaveAtual) return; // ignora o próprio RDO
+          if(normalizarObra(r.obra)!==obraChave) return;
+          const m=(r.nrdo||'').match(/(\d+)/);
+          if(m){ const v=parseInt(m[1],10); if(v>maior) maior=v; }
+        });
+      }
+    }catch(e){ console.error('resolverNumeroSemConflito (nuvem):',e); }
+  }
+
+  return `RDO-${String(maior+1).padStart(3,'0')}`;
 }
 
-function salvarRDO(){
+async function salvarRDO(){
   if(!travarAcao('salvar')) return;
   try{
     const d=getFormData();
     const key=chaveRDO(d.header.data);
-    // TRAVA: não deixa salvar se esse Nº RDO já pertence a OUTRO RDO da MESMA obra —
-    // a numeração de cada obra precisa seguir a sequência sem nunca repetir número.
-    const chaveConflito=acharConflitoDeNRDO(d.header.obra,d.header.nrdo,key);
-    if(chaveConflito){
-      const prosseguir=confirm(
-        `⚠️ O Nº "${d.header.nrdo}" já está sendo usado por OUTRO RDO da obra "${(d.header.obra||'').toUpperCase()}".\n\n`+
-        `Cada RDO de uma mesma obra precisa ter um número único, na sequência.\n\n`+
-        `Recomendado: cancele e ajuste o campo "Nº RDO" para o próximo disponível.\n\n`+
-        `Deseja salvar mesmo assim, com o número repetido?`
-      );
-      if(!prosseguir){
-        showToast('❌ Não salvo — ajuste o Nº RDO pra continuar a sequência da obra.','#dc2626');
-        return;
+
+    // NÚMERO 100% AUTOMÁTICO: recalcula o próximo disponível (local + nuvem) e corrige
+    // sozinho, sem perguntar — garante que nunca existe conflito de número entre
+    // encarregados diferentes na mesma obra, mesmo sem ninguém perceber que ia colidir.
+    if(d.header.obra){
+      const numeroCorreto=await resolverNumeroSemConflito(d.header.obra,key);
+      if(numeroCorreto&&numeroCorreto!==d.header.nrdo){
+        d.header.nrdo=numeroCorreto;
+        const campoNrdo=document.getElementById('h-nrdo');
+        if(campoNrdo) campoNrdo.value=numeroCorreto;
+        showToast(`🔢 Número ajustado automaticamente para ${numeroCorreto} (seguindo a sequência da obra).`,'#1457c8');
       }
     }
+
     localStorage.setItem(key,JSON.stringify(d));
     localStorage.setItem('rdo-last-key',key);
     // Esse é o único lugar que manda pro admin de verdade — é um clique consciente da
@@ -3594,10 +3650,6 @@ function salvarRDO(){
       showToast('✓ RDO salvo neste aparelho. Sem login/internet no momento — envie assim que possível.','#d97706');
     }
     syncSalvarSupabase(d);
-    // Verifica na nuvem (sem travar o salvamento, que já aconteceu local e instantâneo)
-    // se esse mesmo Nº+Obra já foi usado por outro encarregado que este aparelho não
-    // enxerga localmente — só assim dá pra pegar conflito entre pessoas diferentes.
-    verificarConflitoNaNuvem(d.header.obra,d.header.nrdo,key);
     // Reescanear todo o histórico pra atualizar sugestões de nome de projeto pode ficar
     // pesado com muitos RDOs salvos (meses/anos de uso). Adiado pro próximo tick pra não
     // atrasar nem por um instante o retorno visual de "salvo" pro usuário.
@@ -5449,6 +5501,9 @@ function deletarRDO(key,btn){
   if(!count) document.getElementById('search-results').innerHTML='<div class="search-empty">Nenhum RDO encontrado.</div>';
   showToast('🗑 RDO excluído.','#dc2626');
   renderizarRdosDoDia();renderizarObrasParadas();
+  // Se o Painel Executivo estiver aberto ao mesmo tempo, recalcula na hora — sem isso ele
+  // ficaria mostrando o total antigo até ser fechado e reaberto.
+  if(document.getElementById('exec-modal')) renderizarVisaoGeralExecutivo();
 }
 
 // ════════════════════════════════════════════════════════════
