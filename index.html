@@ -2776,6 +2776,35 @@ function exigirAdmin(){
   return false;
 }
 
+// Roda ao abrir o app: confere se algum RDO já ENVIADO deste aparelho foi apagado pelo
+// admin na nuvem — se foi, remove ele daqui também, pra nunca ficar um RDO "fantasma"
+// no aparelho do encarregado mostrando algo que o admin já excluiu do sistema. Só olha
+// RDOs marcados como enviados (rascunho local nunca foi mandado, então nunca é tocado).
+async function reconciliarRDOsApagadosPeloAdmin(){
+  const supabaseClient=getSupabaseClient();
+  if(!supabaseClient||!usuarioAtual) return;
+  try{
+    let enviados=[];
+    try{ enviados=JSON.parse(localStorage.getItem(CHAVE_ENVIADOS)||'[]'); }catch(e){}
+    if(!enviados.length) return;
+    const{data,error}=await supabaseClient.from('rdos').select('rdo_key').eq('criado_por',usuarioAtual.id);
+    if(error||!data) return;
+    const existentesNaNuvem=new Set(data.map(r=>r.rdo_key));
+    let removidos=0;
+    enviados.forEach(key=>{
+      if(!existentesNaNuvem.has(key)){
+        localStorage.removeItem(key);
+        desmarcarComoEnviado(key);
+        removidos++;
+      }
+    });
+    if(removidos>0){
+      showToast(`🔄 ${removidos} RDO(s) removido(s) deste aparelho — foram excluídos pelo admin.`,'#d97706');
+      renderizarRdosDoDia();renderizarObrasParadas();
+    }
+  }catch(e){ console.error('reconciliarRDOsApagadosPeloAdmin error:',e); }
+}
+
 function iniciarAppAposLogin(){
   aplicarPermissoesPorPapel();
   carregarClientes();
@@ -2793,6 +2822,7 @@ function iniciarAppAposLogin(){
   ajustarTextareasAuto();
   initAutoSave();
   atualizarDatalistNomesProjetos();
+  reconciliarRDOsApagadosPeloAdmin();
 }
 document.addEventListener('DOMContentLoaded',()=>{
   verificarSessaoEIniciar();
@@ -3692,6 +3722,14 @@ async function salvarRDO(){
     const d=getFormData();
     const key=chaveRDO(d.header.data);
 
+    // CONFIRMAÇÃO EXPLÍCITA: nunca envia pro admin sem a pessoa confirmar de propósito —
+    // clicar no botão sozinho não basta, precisa confirmar aqui também.
+    const confirmar=confirm(`Salvar e enviar este RDO pro admin agora?\n\nObra: ${d.header.obra||'(não preenchida)'}\nNº RDO: ${d.header.nrdo||'(automático)'}\nData: ${formatarDataBR(d.header.data)||'-'}`);
+    if(!confirmar){
+      showToast('Envio cancelado — nada foi enviado.','#6b7fa0');
+      return;
+    }
+
     // NÚMERO 100% AUTOMÁTICO: recalcula o próximo disponível (local + nuvem) e corrige
     // sozinho, sem perguntar — garante que nunca existe conflito de número entre
     // encarregados diferentes na mesma obra, mesmo sem ninguém perceber que ia colidir.
@@ -4025,7 +4063,7 @@ function dataParaNovoRDO(){
 }
 
 function novoRDO(){
-  salvarRDO(); // garante que o atual está salvo antes de criar novo
+  autoSilentSave(); // garante que o atual está salvo LOCALMENTE antes de criar novo — não envia pro admin sozinho
   const lastKey=localStorage.getItem('rdo-last-key');
   const lastRaw=lastKey?localStorage.getItem(lastKey):null;
   const aviso=document.getElementById('novo-rdo-aviso');
@@ -4215,7 +4253,7 @@ function getPdfFilename(){
 
 function exportarPDF(){
   if(!travarAcao('exportarPDF',2000)) return;
-  salvarRDO();
+  autoSilentSave();
   // Geração via biblioteca externa (html2canvas) se mostrou pouco confiável em diversos
   // celulares (tela em branco, campos cortados). Por isso o botão PDF usa SEMPRE a
   // impressão nativa do navegador/celular — 100% confiável, mostra tudo corretamente,
@@ -4801,7 +4839,7 @@ function validarRDOAntesDeCompartilhar(h,oses){
 
 function pdfParaWhatsApp(){
   if(!travarAcao('pdfWpp',3000)) return;
-  salvarRDO();
+  autoSilentSave();
   const d=getFormData(); const h=d.header;
   const dia=document.getElementById('h-dia')?.value||'';
   const filename=getPdfFilename();
@@ -5167,10 +5205,10 @@ window.addEventListener('afterprint',()=>{
   document.querySelectorAll('.cell-print-text,.ose-name-print-text').forEach(el=>el.remove());
 });
 
-// Auto-salva silenciosamente ao editar a descrição da OSE
+// Auto-salva silenciosamente ao editar a descrição da OSE — SÓ LOCAL, não envia pro admin
 function autoSaveOse(){
   clearTimeout(autoSaveOse._t);
-  autoSaveOse._t=setTimeout(()=>salvarRDO(),1500);
+  autoSaveOse._t=setTimeout(()=>autoSilentSave(),1500);
 }
 
 // ── Editor Rico: funções da toolbar ──────────────────────────────────────────
@@ -7036,6 +7074,38 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('./sw.js').catch(e=>console.log('SW não registrado:',e));
   });
 }
+
+// PWA: pergunta sozinho se a pessoa quer instalar o app (Android/Chrome e computador
+// com Chrome/Edge). No iPhone a Apple não permite esse aviso automático — lá continua
+// precisando do "Adicionar à Tela de Início" manual pelo botão de compartilhar.
+let _promptInstalacaoPWA=null;
+window.addEventListener('beforeinstallprompt',(e)=>{
+  e.preventDefault();
+  _promptInstalacaoPWA=e;
+  // Não mostra de novo se a pessoa já dispensou nesta sessão
+  if(sessionStorage.getItem('rdo-instalacao-dispensada')) return;
+  document.getElementById('faixa-instalar-pwa')?.remove();
+  const faixa=document.createElement('div');
+  faixa.id='faixa-instalar-pwa';
+  faixa.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9998;background:#1457c8;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 -4px 16px rgba(0,0,0,.3)';
+  faixa.innerHTML=`
+    <div style="flex:1;font-size:12.5px;font-weight:700">📲 Quer instalar o app na tela inicial? Fica mais rápido de abrir.</div>
+    <button id="btn-instalar-pwa-sim" style="background:#fff;color:#1457c8;border:none;padding:10px 14px;border-radius:8px;font-weight:900;font-size:12.5px;cursor:pointer;white-space:nowrap">Instalar</button>
+    <button id="btn-instalar-pwa-nao" style="background:transparent;color:#fff;border:none;font-size:18px;padding:4px 6px;cursor:pointer">✕</button>`;
+  document.body.appendChild(faixa);
+  document.getElementById('btn-instalar-pwa-sim').onclick=async()=>{
+    faixa.remove();
+    if(_promptInstalacaoPWA){
+      _promptInstalacaoPWA.prompt();
+      await _promptInstalacaoPWA.userChoice;
+      _promptInstalacaoPWA=null;
+    }
+  };
+  document.getElementById('btn-instalar-pwa-nao').onclick=()=>{
+    faixa.remove();
+    sessionStorage.setItem('rdo-instalacao-dispensada','1');
+  };
+});
 </script>
 </body>
 </html>
