@@ -6849,8 +6849,12 @@ function renderizarProjetos(){
   // pra abrir e ver o motivo de ter gastado mais ou menos tempo.
   const projetos={};
   dados.forEach(r=>{
-    if(!projetos[r.projeto]) projetos[r.projeto]={nome:r.projeto,obra:r.obra,totalHoras:0,primeiraData:r.data,ultimaData:r.data,concluidoEm:null,statusAtual:r.status,porEncarregado:{},porDisciplina:{}};
-    const p=projetos[r.projeto];
+    // Agrupa pelo nome "normalizado" (ignora acento, espaço extra, maiúscula/minúscula) —
+    // sem isso, "PREF 21 (TK325)" e "PREF 21 (TK325) " (com espaço a mais) viravam dois
+    // projetos separados só por causa de diferença de digitação, fragmentando a soma.
+    const chaveProjeto=normalizarObra(r.projeto);
+    if(!projetos[chaveProjeto]) projetos[chaveProjeto]={nome:r.projeto,obra:r.obra,totalHoras:0,primeiraData:r.data,ultimaData:r.data,concluidoEm:null,statusAtual:r.status,porEncarregado:{},porDisciplina:{}};
+    const p=projetos[chaveProjeto];
     p.totalHoras+=r.horas;
     p.porEncarregado[r.encarregado]=(p.porEncarregado[r.encarregado]||0)+r.horas;
     if(!p.porDisciplina[r.disc]) p.porDisciplina[r.disc]={nome:r.disc,totalHoras:0,atividades:[]};
@@ -6939,8 +6943,9 @@ function exportarProjetosExcel(){
 
   const projetos={};
   dados.forEach(r=>{
-    if(!projetos[r.projeto]) projetos[r.projeto]={nome:r.projeto,obra:r.obra,totalHoras:0,primeiraData:r.data,ultimaData:r.data,concluidoEm:null,statusAtual:r.status};
-    const p=projetos[r.projeto];
+    const chaveProjeto=normalizarObra(r.projeto);
+    if(!projetos[chaveProjeto]) projetos[chaveProjeto]={nome:r.projeto,obra:r.obra,totalHoras:0,primeiraData:r.data,ultimaData:r.data,concluidoEm:null,statusAtual:r.status};
+    const p=projetos[chaveProjeto];
     p.totalHoras+=r.horas;
     if(r.data<p.primeiraData) p.primeiraData=r.data;
     if(r.data>=p.ultimaData){ p.ultimaData=r.data; p.statusAtual=r.status; }
