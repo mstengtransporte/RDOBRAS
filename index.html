@@ -189,16 +189,16 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
 }
 .rdo-header-bar::before,.rdo-header-bar::after{content:'◆';font-size:8px;opacity:.5}
 .rdo-header-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
-.hfield{padding:5px 14px;border-right:2px solid #000;border-bottom:2px solid #000;display:flex;flex-direction:column;gap:2px}
+.hfield{padding:5px 14px;border-right:2px solid #000;border-bottom:2px solid #000;display:flex;flex-direction:column;gap:2px;min-width:0}
 .hfield:last-child{border-right:0}
 .hfield label{
   font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:1px;
   color:var(--text3);padding-bottom:1px;border-bottom:1px dashed var(--border2)
 }
-.hfield input,.hfield textarea{
+.hfield input,.hfield textarea,.hfield select{
   background:transparent;border:none;padding:2px 0;
-  font-size:14px;font-weight:900;color:var(--text);width:100%;outline:none;
-  min-height:26px;text-transform:uppercase
+  font-size:14px;font-weight:900;color:var(--text);width:100%;max-width:100%;outline:none;
+  min-height:26px;text-transform:uppercase;box-sizing:border-box
 }
 .hfield textarea{
   font-family:inherit;resize:none;overflow:hidden;box-sizing:border-box;
@@ -576,12 +576,12 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
   display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
   padding-top:8px;border-top:1.5px dashed var(--border2)
 }
-.ose-resp{display:flex;align-items:center;gap:6px}
-.ose-resp label{font-size:8px;font-weight:900;text-transform:uppercase;color:var(--text3);letter-spacing:.8px}
+.ose-resp{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.ose-resp label{font-size:8px;font-weight:900;text-transform:uppercase;color:var(--text3);letter-spacing:.8px;flex-shrink:0}
 .ose-resp textarea{
   background:transparent;border:none;border-bottom:2px solid #000;
   color:var(--text);font-size:13px;font-weight:900;outline:none;padding:2px 4px;
-  width:140px;min-height:28px;text-transform:uppercase;
+  width:100%;flex:1;min-width:0;min-height:28px;text-transform:uppercase;
   font-family:inherit;resize:none;overflow:hidden;box-sizing:border-box;
   white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;line-height:1.25
 }
@@ -875,6 +875,9 @@ input.login-input,
 
   /* Card de OSE: o seletor de status não pode dominar o card inteiro numa tela estreita */
   .ose-status-sel{min-width:0;flex:1;padding:8px 6px;font-size:11px}
+  .ose-footer{flex-direction:column;align-items:stretch}
+  .ose-resp{width:100%}
+  .ose-total-box{width:100%;min-width:0;box-sizing:border-box;justify-content:space-between}
   .ose-name-input{font-size:16px;min-width:100px}
   .ose-id{font-size:8px;padding:3px 7px}
   .ose-header{padding:8px 10px;gap:6px}
