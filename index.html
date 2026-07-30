@@ -3397,6 +3397,7 @@ function buildOSECards(){
     grid.appendChild(card);
   }
   atualizarBotaoAdicionarOSE();
+  atualizarBotoesEsconderOSE();
 }
 
 // Mostra a próxima OSE escondida (2, depois 3, até a 6ª).
@@ -3406,6 +3407,53 @@ function revelarProximaOSE(){
   const card=document.getElementById(`ose-card-${oseVisiveisCount}`);
   if(card) card.style.display='';
   atualizarBotaoAdicionarOSE();
+  atualizarBotoesEsconderOSE();
+}
+
+// Esconde de volta a ÚLTIMA OSE visível (só ela — mantém a sequência sem buracos, senão
+// o botão "Adicionar" ficaria confuso sobre qual é a próxima). Se ela tiver algo
+// preenchido, confirma antes de limpar, pra nunca apagar dado sem avisar.
+function esconderUltimaOSE(o){
+  if(o!==oseVisiveisCount||o<=1) return; // só deixa esconder a última, e nunca a 1ª
+  const nEl=document.getElementById(`ose-name-${o}`);
+  const dEl=document.getElementById(`ose-desc-${o}`);
+  const sEl=document.getElementById(`ose-status-${o}`);
+  const temConteudo=(nEl?.value||'').trim()||(dEl?.textContent||'').trim()||(sEl?.value!=='sem');
+  if(temConteudo&&!confirm(`A OSE ${o} tem informação preenchida. Esconder mesmo assim vai limpar o nome, status, descrição e as horas lançadas nela. Continuar?`)) return;
+
+  // Limpa os campos dessa OSE antes de esconder
+  if(nEl) nEl.value='';
+  if(dEl) dEl.innerHTML='';
+  if(sEl){ sEl.value='sem'; updateOSEStatusSemRevelar(o); }
+  document.querySelectorAll('#workers-body tr').forEach(tr=>{
+    const i=tr.dataset.row;
+    if(!i) return;
+    const hEl=document.getElementById(`hrs-${i}-${o}`);
+    if(hEl) hEl.value='';
+    const hstEl=document.getElementById(`hst-${i}-${o}`);
+    if(hstEl) hstEl.value='normal';
+  });
+
+  const card=document.getElementById(`ose-card-${o}`);
+  if(card) card.style.display='none';
+  oseVisiveisCount=o-1;
+  atualizarBotaoAdicionarOSE();
+  atualizarBotoesEsconderOSE();
+  recalcAll();
+}
+
+// Mesma coisa do updateOSEStatus, mas sem a parte que "revela" OSEs automaticamente —
+// usado aqui de propósito, porque estamos ESCONDENDO, não queremos que o próprio ato de
+// zerar o status dispare a lógica de revelar de novo.
+function updateOSEStatusSemRevelar(o){
+  const sel=document.getElementById(`ose-status-${o}`);
+  const card=document.getElementById(`ose-card-${o}`);
+  const val=sel.value;
+  card.className=`ose-card s-${val}`;
+  oseStatus[o]=val;
+  colorizeOseColumn(o,val);
+  const sumItem=document.getElementById(`sum-item-o${o}`);
+  if(sumItem) sumItem.className=`sum-item ose s-${val}`;
 }
 
 function atualizarBotaoAdicionarOSE(){
@@ -3413,6 +3461,16 @@ function atualizarBotaoAdicionarOSE(){
   if(!btn) return;
   if(oseVisiveisCount>=NUM_OSE){ btn.style.display='none'; }
   else{ btn.style.display=''; btn.textContent=`➕ Adicionar OSE (${oseVisiveisCount}/${NUM_OSE})`; }
+}
+
+// Só a última OSE visível pode ser escondida (mantém a sequência sem buracos) — e a OSE 1
+// nunca pode sumir (sempre precisa de pelo menos uma).
+function atualizarBotoesEsconderOSE(){
+  for(let o=1;o<=NUM_OSE;o++){
+    const btn=document.getElementById(`ose-hide-${o}`);
+    if(!btn) continue;
+    btn.style.display=(o===oseVisiveisCount&&o>1)?'':'none';
+  }
 }
 
 function makeOSECard(o){
@@ -3425,6 +3483,7 @@ function makeOSECard(o){
       <span class="ose-id">OSE 0${o}</span>
       <input class="ose-name-input" type="text" placeholder="Nome / Projeto da OSE ${o}" id="ose-name-${o}" list="ose-nomes-datalist" oninput="updateSummaryOseLabel(${o})" title="Comece a digitar pra ver sugestões de projetos já usados, ou digite um nome novo se for outro projeto">
       <select class="ose-status-sel" id="ose-status-${o}" onchange="updateOSEStatus(${o})">${opts}</select>
+      <button type="button" id="ose-hide-${o}" onclick="esconderUltimaOSE(${o})" title="Esconder esta OSE (não está sendo usada)" style="display:none;background:none;border:1.5px solid rgba(255,255,255,.5);color:inherit;border-radius:4px;width:22px;height:22px;font-size:12px;cursor:pointer;flex-shrink:0;line-height:1">✕</button>
     </div>
     <div class="ose-body">
       <div>
@@ -3492,6 +3551,7 @@ function updateOSEStatus(o){
     oseVisiveisCount=o;
     for(let i=1;i<=o;i++){ const c=document.getElementById(`ose-card-${i}`); if(c) c.style.display=''; }
     atualizarBotaoAdicionarOSE();
+    atualizarBotoesEsconderOSE();
   }
   // Atualiza cor dos inputs da coluna e do rodapé
   colorizeOseColumn(o,val);
@@ -3987,6 +4047,7 @@ function restaurarEstadoCompleto(d){
         oseVisiveisCount=n;
         for(let i=1;i<=n;i++){ const c=document.getElementById(`ose-card-${i}`); if(c) c.style.display=''; }
         atualizarBotaoAdicionarOSE();
+        atualizarBotoesEsconderOSE();
       }
     });
   }
