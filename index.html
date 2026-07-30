@@ -102,14 +102,14 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
 .topbar-divider{width:1px;height:28px;background:rgba(255,255,255,.15);flex-shrink:0}
 .topbar-title{color:#fff;font-size:13px;font-weight:900;letter-spacing:.5px;line-height:1.1}
 .topbar-title small{font-size:8px;font-weight:500;opacity:.55;display:block;letter-spacing:1px}
-.topbar-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;width:100%}
+.topbar-actions{display:flex;gap:6px;flex-wrap:nowrap;align-items:center;width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:2px}
 .topbar-actions .topbar-divider{margin:0 2px}
 .btn{
   padding:6px 10px;border:1.5px solid rgba(255,255,255,.15);cursor:pointer;
   font-size:10px;font-weight:900;display:inline-flex;align-items:center;gap:4px;
   transition:all .12s;white-space:nowrap;letter-spacing:.3px;
   -webkit-appearance:none;touch-action:manipulation;
-  border-radius:3px;text-transform:uppercase
+  border-radius:3px;text-transform:uppercase;flex-shrink:0
 }
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btn:hover{filter:brightness(1.2);transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.35)}
@@ -847,8 +847,7 @@ input.login-input,
    ══════════════════════════════════════ */
 @media(max-width:600px){
   .topbar{padding:6px 10px}
-  .topbar-actions{overflow-x:visible;overflow-y:visible;flex-wrap:wrap;justify-content:flex-start}
-  .topbar-actions{flex-wrap:nowrap}
+  .topbar-actions{overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap}
   .topbar-title{display:none}
   .topbar-brand-tag{display:none}
   .btn{padding:6px 5px;font-size:17px;gap:1px;flex-direction:column;min-width:54px;line-height:1.1;flex-shrink:0}
