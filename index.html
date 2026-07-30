@@ -2230,6 +2230,7 @@ function coletarResumoPorEncarregado(){
       else if(o.status==='par') r.par+=horasOSE;
       const descTexto=(o.desc||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
       atividades.push({
+        oseIndex:idx,
         ose:`OSE ${String(idx+1).padStart(2,'0')}`,
         nomeProjeto:(o.name||'—').toUpperCase(),
         status:o.status,
@@ -2315,6 +2316,49 @@ function renderizarVisaoGeralExecutivo(){
 // Apaga um RDO diretamente de dentro do Painel Executivo (histórico individual do
 // encarregado) — some do aparelho e da nuvem juntos (mesma trava do Buscar), e a tela
 // já atualiza sozinha, continuando na mesma pessoa que estava sendo vista.
+// Apaga só UMA atividade (status/descrição/horas de uma OSE específica) de dentro de
+// um RDO — diferente do botão de excluir o RDO inteiro. O resto do RDO continua intacto.
+// IMPORTANTE: atualiza rdo_oses e rdo_workers direto na nuvem, SEM mexer em quem é o
+// dono (criado_por) do RDO — essencial, porque quem apaga aqui normalmente é o admin,
+// editando o RDO de OUTRO encarregado; se passasse pelo salvamento normal, o RDO passaria
+// a contar como "criado pelo admin" por engano.
+async function deletarAtividadeExecutivo(rdoKey,oseIndex,nomeEncarregado){
+  if(!confirm('Remover só esta atividade (status, descrição e horas lançadas nela)? O resto do RDO continua intacto.'))return;
+  try{
+    const raw=localStorage.getItem(rdoKey);
+    if(raw){
+      const d=JSON.parse(raw);
+      if(d.oses&&d.oses[oseIndex]) d.oses[oseIndex]={name:d.oses[oseIndex].name||'',status:'sem',desc:'',descText:'',resp:''};
+      (d.workers||[]).forEach(w=>{
+        if(w.hrs) w.hrs[oseIndex]='';
+        if(w.hst) w.hst[oseIndex]='normal';
+      });
+      localStorage.setItem(rdoKey,JSON.stringify(d));
+    }
+
+    const supabaseClient=getSupabaseClient();
+    if(supabaseClient){
+      const{data:rdoRow}=await supabaseClient.from('rdos').select('id').eq('rdo_key',rdoKey).single();
+      if(rdoRow){
+        await supabaseClient.from('rdo_oses').update({status:'sem',descricao:null,responsavel:null}).eq('rdo_id',rdoRow.id).eq('ose_numero',oseIndex+1);
+        const{data:workersRows}=await supabaseClient.from('rdo_workers').select('id,hrs').eq('rdo_id',rdoRow.id);
+        if(workersRows){
+          for(const w of workersRows){
+            const hrs=w.hrs||[];
+            hrs[oseIndex]='';
+            await supabaseClient.from('rdo_workers').update({hrs}).eq('id',w.id);
+          }
+        }
+      }
+    }
+    showToast('🗑 Atividade removida.','#dc2626');
+    selecionarEncarregadoExecutivo(nomeEncarregado);
+  }catch(e){
+    console.error('deletarAtividadeExecutivo error:',e);
+    showToast('Erro ao remover atividade.','#dc2626');
+  }
+}
+
 function deletarRDOExecutivo(key,nomeEncarregado){
   if(!confirm('Excluir este RDO permanentemente? Isso remove ele do sistema pra sempre, inclusive da nuvem.'))return;
   localStorage.removeItem(key);
@@ -2365,7 +2409,10 @@ function selecionarEncarregadoExecutivo(nome){
           </div>
         </div>
         ${(x.atividades||[]).map(a=>`<div style="margin:6px 0 0 8px;padding:6px 8px;border-left:3px solid ${STATUS_COR[a.status]||'#888'};background:var(--surface2)">
-          <div style="font-size:11px;font-weight:800;color:${STATUS_COR[a.status]||'#888'}">${STATUS_NOME[a.status]||a.status} — ${a.nomeProjeto} (${a.ose}) — ${fmt(a.horas)}h</div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <div style="font-size:11px;font-weight:800;color:${STATUS_COR[a.status]||'#888'}">${STATUS_NOME[a.status]||a.status} — ${a.nomeProjeto} (${a.ose}) — ${fmt(a.horas)}h</div>
+            <button onclick="deletarAtividadeExecutivo('${x.key}',${a.oseIndex},'${r.nome.replace(/'/g,"\\'")}')" title="Remover só esta atividade" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0">🗑️ atividade</button>
+          </div>
           <div style="font-size:10.5px;color:var(--text2);margin:2px 0">${a.descricao}</div>
           <div style="font-size:10.5px;color:var(--text3)">👥 ${a.trabalhadores.map(t=>`${t.nome} (${t.funcao}): ${fmt(t.horas)}h`).join(', ')||'—'}</div>
         </div>`).join('')||'<div style="margin-left:8px;font-size:10.5px;color:var(--text3)">Sem atividades com status/horas lançadas.</div>'}
