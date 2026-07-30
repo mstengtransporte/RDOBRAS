@@ -653,6 +653,15 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 /* Corrige o preenchimento automático do navegador deixando o campo escuro/ilegível */
+.login-input,
+input.login-input,
+#login-email,
+#login-senha{
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+  caret-color:#ffffff!important;
+  color-scheme:dark;
+}
 .login-input:-webkit-autofill,
 .login-input:-webkit-autofill:hover,
 .login-input:-webkit-autofill:focus{
@@ -1356,7 +1365,7 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
 <body>
 
 <!-- TELA DE LOGIN — fica por cima de tudo até a pessoa entrar -->
-<div id="login-overlay" style="position:fixed;inset:0;z-index:99999;background:#0b1220;display:flex;align-items:center;justify-content:center;padding:20px">
+<div id="login-overlay" style="position:fixed;inset:0;z-index:99999;background:#0b1220;display:flex;align-items:center;justify-content:center;padding:20px;color-scheme:dark">
   <div style="max-width:340px;width:100%">
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:22px;font-weight:900;color:#fff">📋 RDO — Master Energy</div>
@@ -1404,7 +1413,7 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
     <button class="btn" style="background:#9d174d;color:#fff" onclick="abrirPainelExecutivo()" title="Visão geral de todos os encarregados, ou individual de cada um">🎯 <span>Executivo</span></button>
     </span>
     <span class="topbar-divider"></span>
-    <button class="btn btn-save"    onclick="salvarRDO()">💾 <span>Salvar</span></button>
+    <button class="btn btn-save"    onclick="salvarRDO()" title="Salva neste aparelho E envia pro admin">💾 <span>Salvar e Enviar</span></button>
     <button class="btn btn-new"     onclick="novoRDO()">📄 <span>Novo</span></button>
     <button class="btn" id="btn-desfazer" style="background:#7c5a00;color:#fff" onclick="desfazerUltimaAcao()" title="Desfazer: volta ao estado de antes da última ação (excluir funcionário, criar novo RDO)">↩️ <span>Desfazer</span></button>
     <span class="topbar-divider"></span>
@@ -1447,24 +1456,20 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
         <div style="flex:1;padding:5px 14px;display:flex;flex-direction:column;gap:2px"><label style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Dia da Semana</label><input type="text" id="h-dia" readonly style="background:transparent;border:none;border-bottom:2px solid #000;padding:2px 0;font-size:15px;font-weight:900;color:var(--text);width:100%;outline:none;min-height:28px"></div>
       </div>
       <div class="hfield"><label>Obra / Projeto (Cliente)</label><select id="h-obra" onchange="onMudarClienteSelecionado()" onblur="revalidarNRDOSeNovo()" style="text-transform:uppercase"><option value="">— Selecione o cliente —</option></select></div>
-      <div class="hfield"><label>Disciplina</label><textarea id="h-disc" rows="1" placeholder="Ex: MECÂNICA" oninput="autoGrowTA(this);atualizarBannerObra()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></textarea></div>
+      <div class="hfield"><label>Disciplina</label><select id="h-disc" onchange="atualizarBannerObra()" style="text-transform:uppercase">
+        <option value="">— Selecione —</option>
+        <option value="MECÂNICA">MECÂNICA</option>
+        <option value="ELÉTRICA">ELÉTRICA</option>
+        <option value="INSTRUMENTAÇÃO">INSTRUMENTAÇÃO</option>
+        <option value="ANDAIME">ANDAIME</option>
+        <option value="CIVIL">CIVIL</option>
+        <option value="PINTURA">PINTURA</option>
+        <option value="TÉC. SEGURANÇA">TÉC. SEGURANÇA</option>
+      </select></div>
       <div class="hfield" style="border-right:none"><label>Encarregado</label><textarea id="h-enc" rows="1" placeholder="Nome completo" oninput="autoGrowTA(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></textarea></div>
     </div>
   </div>
 
-  <!-- RDOs DESTE DIA — só aparece quando há mais de um RDO salvo pra mesma data (outras
-       obras/equipes). Permite trocar entre eles com um toque, sem precisar abrir a Busca. -->
-  <div id="rdos-do-dia-bar" class="rdos-do-dia-bar" style="display:none">
-    <span class="rdos-do-dia-label" id="rdos-do-dia-label">📋 RDOs deste dia:</span>
-    <div id="rdos-do-dia-lista" class="rdos-do-dia-lista"></div>
-  </div>
-
-  <!-- OBRAS PARADAS — só aparece de segunda a sexta, quando alguma obra está há 3+ dias
-       úteis seguidos sem nenhum RDO lançado. Fins de semana nunca disparam esse aviso. -->
-  <div id="obras-paradas-bar" class="obras-paradas-bar" style="display:none">
-    <span class="obras-paradas-label">⏸️ Sem RDO há alguns dias:</span>
-    <div id="obras-paradas-lista" class="obras-paradas-lista"></div>
-  </div>
 
   <!-- LEGENDA -->
   <div class="legend-bar">
@@ -1588,6 +1593,7 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
       <button onclick="fecharBuscaRDO()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0 4px;line-height:1">✕</button>
     </div>
     <div class="search-box-body">
+      <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px">Mostra só RDOs já <b>Salvos e Enviados</b> — rascunho ainda não enviado não aparece aqui.</div>
       <div class="search-filters">
         <input type="date" id="search-de" title="Data inicial">
         <input type="date" id="search-ate" title="Data final">
@@ -2134,6 +2140,21 @@ function setObraSelecionada(valor){
   atualizarBannerObra();
 }
 
+// Mesma ideia do setObraSelecionada, mas pra Disciplina — RDOs antigos podem ter uma
+// disciplina digitada livre que não está mais na lista fixa; adiciona ela como opção
+// extra pra não sumir/zerar o campo ao abrir um RDO salvo antes dessa mudança.
+function setDiscSelecionada(valor){
+  const sel=document.getElementById('h-disc');
+  if(!sel||!valor) return;
+  const existe=[...sel.options].some(o=>o.value===valor);
+  if(!existe){
+    const opt=document.createElement('option');
+    opt.value=valor; opt.textContent=valor+' (não padrão)';
+    sel.appendChild(opt);
+  }
+  sel.value=valor;
+}
+
 // Quando a pessoa escolhe "➕ Cliente novo" no campo Obra — deixa digitar um nome
 // temporário pra não travar o trabalho (o cliente pode ter acabado de pedir o
 // serviço), mas avisa que precisa avisar o admin pra cadastrar oficialmente.
@@ -2169,6 +2190,7 @@ function coletarResumoPorEncarregado(){
     try{ d=JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
     const h=d&&d.header;
     if(!h||!h.data) continue;
+    if(!h.obra||!h.obra.trim()) continue; // rascunho sem obra escolhida ainda — não conta como RDO de verdade
     const enc=(h.enc||'(SEM ENCARREGADO PREENCHIDO)').toUpperCase();
     if(!porEnc[enc]) porEnc[enc]={nome:enc,rdos:new Set(),obras:new Set(),and:0,ext:0,conc:0,par:0,total:0,ultimaData:h.data,rdosDetalhe:[]};
     const r=porEnc[enc];
@@ -2403,6 +2425,10 @@ async function alternarClienteAtivo(id,novoStatus,nome){
 const _filaSyncPorRdo={};
 async function syncSalvarSupabase(d){
   const h=d.header||{};
+  // Rascunho sem Obra escolhida ainda não vai pra nuvem — evita "RDO fantasma" sem nome
+  // aparecendo pro admin só porque alguém abriu a tela e ainda não preencheu nada.
+  // Continua salvando local normalmente (autoSilentSave cuida disso à parte).
+  if(!h.obra||!h.obra.trim()) return;
   const rdoKey=chaveRDO(h.data);
   const anterior=_filaSyncPorRdo[rdoKey]||Promise.resolve();
   const atual=anterior.then(()=>_syncSalvarSupabaseReal(d,rdoKey)).catch(e=>console.error('syncSalvarSupabase (fila):',e));
@@ -2516,6 +2542,7 @@ async function buscarERestaurarDaNuvem(dataDe,dataAte){
           funcsList:r.funcs_list||[]
         };
         localStorage.setItem(r.rdo_key,JSON.stringify(d));
+        marcarComoEnviado(r.rdo_key); // já está na nuvem, então já conta como enviado
         sucesso++;
       }catch(e){falha++;}
     });
@@ -2585,6 +2612,28 @@ function chaveRDO(data){
 function extrairIdDaChave(key){
   const m=(key||'').match(/^rdo-.+__(.+)$/);
   return m?m[1]:'';
+}
+
+// ── CONTROLE DE "ENVIADO" ──────────────────────────────────────────────
+// Guarda quais RDOs (por chave) já foram explicitamente enviados pro admin,
+// clicando em "Salvar e Enviar" — separado da lista completa de RDOs salvos
+// localmente (que inclui rascunhos ainda não enviados). A Busca usa isso pra
+// mostrar só o que já foi enviado de verdade.
+const CHAVE_ENVIADOS='rdo-enviados';
+function marcarComoEnviado(key){
+  try{
+    const lista=JSON.parse(localStorage.getItem(CHAVE_ENVIADOS)||'[]');
+    if(!lista.includes(key)){ lista.push(key); localStorage.setItem(CHAVE_ENVIADOS,JSON.stringify(lista)); }
+  }catch(e){}
+}
+function desmarcarComoEnviado(key){
+  try{
+    const lista=JSON.parse(localStorage.getItem(CHAVE_ENVIADOS)||'[]').filter(k=>k!==key);
+    localStorage.setItem(CHAVE_ENVIADOS,JSON.stringify(lista));
+  }catch(e){}
+}
+function estaEnviado(key){
+  try{ return JSON.parse(localStorage.getItem(CHAVE_ENVIADOS)||'[]').includes(key); }catch(e){ return false; }
 }
 
 // Status das OSEs (índice 1..6)
@@ -3535,7 +3584,16 @@ function salvarRDO(){
     }
     localStorage.setItem(key,JSON.stringify(d));
     localStorage.setItem('rdo-last-key',key);
-    showToast('✓ RDO salvo com sucesso!','#16a34a');
+    // Esse é o único lugar que manda pro admin de verdade — é um clique consciente da
+    // pessoa, não algo automático. Marca esse RDO como "enviado" (usado pela Busca, que só
+    // mostra RDOs já enviados) e sincroniza com a nuvem.
+    marcarComoEnviado(key);
+    if(getSupabaseClient()&&usuarioAtual){
+      showToast('✓ RDO salvo e enviado ao admin!','#16a34a');
+    }else{
+      showToast('✓ RDO salvo neste aparelho. Sem login/internet no momento — envie assim que possível.','#d97706');
+    }
+    syncSalvarSupabase(d);
     // Verifica na nuvem (sem travar o salvamento, que já aconteceu local e instantâneo)
     // se esse mesmo Nº+Obra já foi usado por outro encarregado que este aparelho não
     // enxerga localmente — só assim dá pra pegar conflito entre pessoas diferentes.
@@ -3712,7 +3770,7 @@ function restaurarEstadoCompleto(d){
   if(h.data){document.getElementById('h-data').value=h.data;updateDiaSemana();}
   if(h.obra)setObraSelecionada(h.obra);
   if(h.enc)document.getElementById('h-enc').value=h.enc;
-  if(h.disc)document.getElementById('h-disc').value=h.disc;
+  if(h.disc)setDiscSelecionada(h.disc);
   if(d.oses){
     d.oses.forEach((o,idx)=>{
       const n=idx+1;
@@ -3785,7 +3843,7 @@ function aplicarModeloNovoDia(d,proximoNRDO,manterStatus=true,dataAlvo=null,mant
   updateDiaSemana();
   if(h.obra) setObraSelecionada(h.obra);
   if(h.enc)  document.getElementById('h-enc').value=h.enc;
-  if(h.disc) document.getElementById('h-disc').value=h.disc;
+  if(h.disc) setDiscSelecionada(h.disc);
 
   if(d.oses){
     d.oses.forEach((o,idx)=>{
@@ -4927,9 +4985,9 @@ function autoSilentSave(){
     _lastSaveKey=key;
     const dot=document.getElementById('autosave-dot');
     if(dot){dot.classList.add('show');setTimeout(()=>dot.classList.remove('show'),1800);}
-    // Sincroniza com o Supabase em segundo plano — não trava o salvamento local
-    // nem impede o app de continuar funcionando se a internet cair.
-    syncSalvarSupabase(d);
+    // IMPORTANTE: autosave é só local, de propósito — evita perder o preenchimento se a
+    // internet cair, o celular travar, etc. Não manda nada pro admin sozinho. Só o botão
+    // "💾 Salvar e Enviar" envia pra nuvem, de forma explícita e consciente da pessoa.
   }catch(e){}
 }
 // Salva ao fechar/sair da aba
@@ -5286,7 +5344,7 @@ function getAllRDOKeys(){
   const keys=[];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
-    if(k&&k.startsWith('rdo-')&&k!=='rdo-last-key'&&k!=='rdo-names-list'&&k!=='rdo-funcs-list'&&k!=='rdo-theme'){
+    if(k&&k.startsWith('rdo-')&&!CHAVES_META_BACKUP.includes(k)){
       keys.push(k);
     }
   }
@@ -5304,6 +5362,7 @@ function buscarRDOs(){
   const resultados=[];
   keys.forEach(k=>{
     try{
+      if(!estaEnviado(k)) return; // rascunho ainda não enviado — não aparece na busca
       const raw=localStorage.getItem(k);
       if(!raw)return;
       const d=JSON.parse(raw);
@@ -5382,6 +5441,7 @@ function deletarRDO(key,btn){
   if(!confirm('Excluir este RDO permanentemente?'))return;
   localStorage.removeItem(key);
   if(localStorage.getItem('rdo-last-key')===key) localStorage.removeItem('rdo-last-key');
+  desmarcarComoEnviado(key);
   syncDeletarSupabase(key); // apaga também no banco de dados (Supabase) — OSEs e horas somem juntas
   btn.closest('.rdo-result-item').remove();
   const count=document.querySelectorAll('.rdo-result-item').length;
@@ -6685,7 +6745,7 @@ function showToast(msg,color){
 // celular quebrar, resetar ou trocar de dono (hoje tudo fica só no
 // localStorage deste aparelho, sem nenhuma cópia em outro lugar).
 // ════════════════════════════════════════════════════════════
-const CHAVES_META_BACKUP=['rdo-names-list','rdo-funcs-list','rdo-theme','rdo-frases','rdo-last-key'];
+const CHAVES_META_BACKUP=['rdo-names-list','rdo-funcs-list','rdo-theme','rdo-frases','rdo-last-key','rdo-clientes-cache','rdo-ultimo-usuario-id','rdo-enviados'];
 
 function coletarTodosOsDadosParaBackup(){
   autoSilentSave(); // trava de segurança: o backup tem que sempre incluir a última edição feita na tela
