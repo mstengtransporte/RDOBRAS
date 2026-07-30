@@ -2312,6 +2312,23 @@ function renderizarVisaoGeralExecutivo(){
   `;
 }
 
+// Apaga um RDO diretamente de dentro do Painel Executivo (histórico individual do
+// encarregado) — some do aparelho e da nuvem juntos (mesma trava do Buscar), e a tela
+// já atualiza sozinha, continuando na mesma pessoa que estava sendo vista.
+function deletarRDOExecutivo(key,nomeEncarregado){
+  if(!confirm('Excluir este RDO permanentemente? Isso remove ele do sistema pra sempre, inclusive da nuvem.'))return;
+  localStorage.removeItem(key);
+  if(localStorage.getItem('rdo-last-key')===key) localStorage.removeItem('rdo-last-key');
+  desmarcarComoEnviado(key);
+  syncDeletarSupabase(key);
+  showToast('🗑 RDO excluído.','#dc2626');
+  // Se esse era o último RDO dessa pessoa, ela some da lista — nesse caso volta pra Visão
+  // Geral em vez de deixar a tela travada mostrando informação que não existe mais.
+  const aindaExiste=coletarResumoPorEncarregado().some(x=>x.nome===nomeEncarregado);
+  if(aindaExiste) selecionarEncarregadoExecutivo(nomeEncarregado);
+  else renderizarVisaoGeralExecutivo();
+}
+
 function selecionarEncarregadoExecutivo(nome){
   const resumo=coletarResumoPorEncarregado();
   const r=resumo.find(x=>x.nome===nome);
@@ -2342,7 +2359,10 @@ function selecionarEncarregadoExecutivo(nome){
       ${r.rdosDetalhe.map(x=>`<div style="padding:10px 12px;border:1px solid var(--border,#e5e5e5);border-radius:8px">
         <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px">
           <div style="font-weight:900">${formatarDataBR(x.data)} — 🏭 ${x.obra} ${x.disc&&x.disc!=='—'?'· '+x.disc:''} <span style="font-weight:400;opacity:.7">(${x.nrdo})</span></div>
-          <div style="font-weight:900;white-space:nowrap">${fmt(x.totalHoras)}h</div>
+          <div style="display:flex;align-items:center;gap:8px;white-space:nowrap">
+            <span style="font-weight:900">${fmt(x.totalHoras)}h</span>
+            <button onclick="deletarRDOExecutivo('${x.key}','${r.nome.replace(/'/g,"\\'")}')" title="Excluir este RDO" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;border-radius:4px;padding:3px 7px;font-size:11px;cursor:pointer">🗑️</button>
+          </div>
         </div>
         ${(x.atividades||[]).map(a=>`<div style="margin:6px 0 0 8px;padding:6px 8px;border-left:3px solid ${STATUS_COR[a.status]||'#888'};background:var(--surface2)">
           <div style="font-size:11px;font-weight:800;color:${STATUS_COR[a.status]||'#888'}">${STATUS_NOME[a.status]||a.status} — ${a.nomeProjeto} (${a.ose}) — ${fmt(a.horas)}h</div>
