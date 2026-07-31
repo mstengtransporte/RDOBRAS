@@ -7276,15 +7276,9 @@ async function exportarBackupCompletoExcel(btn){
     const listaEncarregados=[...nomesEncarregados].sort();
     const listaDisciplinas=[...nomesDisciplinas].sort();
 
-    // ═══════════════════════════════════════════════════════════════════
-    // TUDO NUMA ABA SÓ: painel de resumo no topo, e logo abaixo (na mesma
-    // planilha, sem trocar de aba) o detalhamento de todos os RDOs, com
-    // Obra e Nº RDO agrupados (clicáveis, "+/−" nativos do Excel).
-    // ═══════════════════════════════════════════════════════════════════
     const NUM_COLS_DETALHE=12;
     const largura=Math.max(NUM_COLS_DETALHE,listaEncarregados.length+2,listaDisciplinas.length+2);
     const ws=wb.addWorksheet('RDO Master Energy',{properties:{tabColor:{argb:'FF1457C8'}}});
-    for(let c=1;c<=largura;c++) ws.getColumn(c).width = c===3?26:(c===9?38:16);
 
     let L=1;
     ws.mergeCells(1,1,3,largura);
@@ -7362,17 +7356,23 @@ async function exportarBackupCompletoExcel(btn){
     desenharTabela('📊 HORAS POR OBRA × DISCIPLINA','FF1A52C8',['Obra',...listaDisciplinas],
       Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinas.map(disc=>Number((linha[disc]||0).toFixed(1)))]));
 
-    // ── SEÇÃO DETALHADA, continuando na MESMA aba, logo abaixo dos resumos ──
+    // ═══════════════════════════════════════════════════════════════════
+    // DETALHAMENTO COMPLETO — uma linha por funcionário+atividade, ORDENADO
+    // por Encarregado → Data → Obra → Nº RDO → OSE, com as colunas que se
+    // repetem (Encarregado/Data/Nº RDO/Obra/Disciplina) MESCLADAS em vez de
+    // repetidas — fica organizado igual em qualquer aparelho/programa,
+    // sem depender de clicar em nada pra abrir/ver a informação.
+    // ═══════════════════════════════════════════════════════════════════
     ws.mergeCells(L,1,L,NUM_COLS_DETALHE);
     const tituloDet=ws.getCell(L,1);
-    tituloDet.value='📊 DETALHAMENTO COMPLETO DE TODOS OS RDOs — clique nos "+" à esquerda pra abrir uma Obra ou um RDO';
+    tituloDet.value='📊 DETALHAMENTO COMPLETO — TODOS OS RDOs DE TODOS OS ENCARREGADOS';
     tituloDet.font={bold:true,color:{argb:'FFFFFFFF'},size:12};
     tituloDet.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
     ws.getRow(L).height=22;
     L++;
 
     const headerRowNum=L;
-    const headers=['DATA','Nº RDO','OBRA / CLIENTE','DISCIPLINA','ENCARREGADO','Nº OSE','NOME DO PROJETO (OSE)','STATUS','DESCRIÇÃO DOS SERVIÇOS','FUNCIONÁRIO','FUNÇÃO','HORAS'];
+    const headers=['ENCARREGADO','DATA','Nº RDO','OBRA / CLIENTE','DISCIPLINA','Nº OSE','NOME DO PROJETO (OSE)','STATUS','DESCRIÇÃO DOS SERVIÇOS','FUNCIONÁRIO','FUNÇÃO','HORAS'];
     headers.forEach((h,ci)=>{
       const cell=ws.getCell(L,ci+1);
       cell.value=h;
@@ -7383,73 +7383,64 @@ async function exportarBackupCompletoExcel(btn){
     });
     ws.getRow(L).height=28;
     L++;
+    const detStartRow=L;
 
-    // Agrupa os registros em Obra → RDO → atividades (obra com mais horas primeiro)
-    const porObraParaDetalhe={};
-    registros.forEach(r=>{
-      const chaveObra=normalizarObra(r.obra);
-      if(!porObraParaDetalhe[chaveObra]) porObraParaDetalhe[chaveObra]={nome:r.obra,horas:0,rdos:{}};
-      porObraParaDetalhe[chaveObra].horas+=r.horas;
-      const chaveRdo=r.nrdo+'|'+r.data;
-      if(!porObraParaDetalhe[chaveObra].rdos[chaveRdo]) porObraParaDetalhe[chaveObra].rdos[chaveRdo]={nrdo:r.nrdo,data:r.data,encarregado:r.encarregado,disc:r.disc,horas:0,atividades:[]};
-      porObraParaDetalhe[chaveObra].rdos[chaveRdo].horas+=r.horas;
-      porObraParaDetalhe[chaveObra].rdos[chaveRdo].atividades.push(r);
+    // Ordena: Encarregado > Data > Obra > Nº RDO > Nº OSE — assim quem abrir já vê
+    // o trabalho de cada pessoa agrupado em sequência, sem precisar filtrar nada
+    registros.sort((a,b)=>{
+      if(a.encarregado!==b.encarregado) return a.encarregado.localeCompare(b.encarregado);
+      if(a.data!==b.data) return a.data.localeCompare(b.data);
+      const chaveObraA=normalizarObra(a.obra),chaveObraB=normalizarObra(b.obra);
+      if(chaveObraA!==chaveObraB) return chaveObraA.localeCompare(chaveObraB);
+      if(a.nrdo!==b.nrdo) return a.nrdo.localeCompare(b.nrdo);
+      return a.oseNumero-b.oseNumero;
     });
 
-    Object.values(porObraParaDetalhe).sort((a,b)=>b.horas-a.horas).forEach(obraInfo=>{
-      const rdosDaObra=Object.values(obraInfo.rdos).sort((a,b)=>b.data.localeCompare(a.data));
-      // Linha da OBRA (nível 0 — sempre visível, agrupa tudo abaixo dela)
-      const linObra=['','',`🏭 ${obraInfo.nome}`,'','','','','',`${rdosDaObra.length} RDO(s)`,'','',Number(obraInfo.horas.toFixed(1))];
-      linObra.forEach((v,ci)=>{
-        const c=ws.getCell(L,ci+1); c.value=v;
-        c.font={bold:true,size:11.5,color:{argb:'FFFFFFFF'}};
-        c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
+    // Colunas 1-5 (Encarregado, Data, Nº RDO, Obra, Disciplina) mesclam quando o
+    // valor se repete na linha seguinte — evita repetir a mesma informação várias
+    // vezes seguidas, sem esconder nem uma linha de dado real.
+    const colsParaMesclar=[1,2,3,4,5];
+    let inicioBloco={1:L,2:L,3:L,4:L,5:L};
+
+    registros.forEach((r,idx)=>{
+      const infoStatus=STATUS_INFO_EXCEL[r.status]||{nome:r.status.toUpperCase(),cor:'FF888888'};
+      const linha=[r.encarregado,formatarDataBR(r.data),r.nrdo,r.obra,r.disc,r.oseNumero,r.nomeProjeto,infoStatus.nome,r.descricao,r.funcionario,r.funcao,r.horas];
+      linha.forEach((v,ci)=>{
+        const c=ws.getCell(L,ci+1);
+        c.value=v;
+        c.font={size:10};
+        c.alignment={vertical:'middle',horizontal:(ci===8?'left':'center'),wrapText:ci===8};
+        c.border={top:{style:'thin',color:{argb:'FFDDDDDD'}},bottom:{style:'thin',color:{argb:'FFDDDDDD'}},left:{style:'thin',color:{argb:'FFEEEEEE'}},right:{style:'thin',color:{argb:'FFEEEEEE'}}};
       });
-      ws.getCell(L,12).numFmt='0.0'; ws.getCell(L,12).alignment={horizontal:'center'};
-      ws.getRow(L).outlineLevel=0;
+      const statusCell=ws.getCell(L,8);
+      statusCell.font={bold:true,color:{argb:'FFFFFFFF'},size:9.5};
+      statusCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:infoStatus.cor}};
+      statusCell.alignment={horizontal:'center',vertical:'middle'};
+      ws.getCell(L,12).numFmt='0.0';
+      ws.getCell(L,12).font={bold:true,size:10.5};
+      ws.getCell(L,1).font={bold:true,size:10};
+
+      // Mescla as colunas-chave quando o próximo registro repete o mesmo grupo
+      const proximo=registros[idx+1];
+      const chaveAtualPorCol={1:r.encarregado,2:formatarDataBR(r.data),3:r.nrdo,4:r.obra,5:r.disc};
+      const chaveProximaPorCol=proximo?{1:proximo.encarregado,2:formatarDataBR(proximo.data),3:proximo.nrdo,4:proximo.obra,5:proximo.disc}:null;
+      colsParaMesclar.forEach(col=>{
+        const mudou=!chaveProximaPorCol||chaveAtualPorCol[col]!==chaveProximaPorCol[col]||
+          (col>1&&colsParaMesclar.slice(0,col-1).some(c2=>chaveAtualPorCol[c2]!==chaveProximaPorCol[c2]));
+        if(mudou){
+          if(inicioBloco[col]<L) ws.mergeCells(inicioBloco[col],col,L,col);
+          inicioBloco[col]=L+1;
+        }
+      });
       L++;
-
-      rdosDaObra.forEach(rdoInfo=>{
-        // Linha do RDO (nível 1 — abre/fecha junto com a obra)
-        const linRdo=[formatarDataBR(rdoInfo.data),rdoInfo.nrdo,`↳ ${obraInfo.nome}`,rdoInfo.disc,rdoInfo.encarregado,'','','',`${rdoInfo.atividades.length} atividade(s) lançada(s)`,'','',Number(rdoInfo.horas.toFixed(1))];
-        linRdo.forEach((v,ci)=>{
-          const c=ws.getCell(L,ci+1); c.value=v;
-          c.font={bold:true,size:10.5};
-          c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFDCE6F5'}};
-        });
-        ws.getCell(L,12).numFmt='0.0'; ws.getCell(L,12).alignment={horizontal:'center'};
-        ws.getRow(L).outlineLevel=1;
-        L++;
-
-        // Linhas de atividade (nível 2 — funcionário, descrição, status, tudo aberto)
-        rdoInfo.atividades.forEach((r,idx)=>{
-          const infoStatus=STATUS_INFO_EXCEL[r.status]||{nome:r.status.toUpperCase(),cor:'FF888888'};
-          const linDet=[formatarDataBR(r.data),r.nrdo,r.obra,r.disc,r.encarregado,r.oseNumero,r.nomeProjeto,infoStatus.nome,r.descricao,r.funcionario,r.funcao,r.horas];
-          const corFundo=idx%2===0?'FFFFFFFF':'FFF7F9FC';
-          linDet.forEach((v,ci)=>{
-            const c=ws.getCell(L,ci+1); c.value=v;
-            c.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFundo}};
-            c.border={bottom:{style:'thin',color:{argb:'FFE8E8E8'}}};
-            c.font={size:9.5};
-            c.alignment={vertical:'middle'};
-          });
-          const statusCell=ws.getCell(L,8);
-          statusCell.font={bold:true,color:{argb:'FFFFFFFF'},size:9};
-          statusCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:infoStatus.cor}};
-          statusCell.alignment={horizontal:'center',vertical:'middle'};
-          ws.getCell(L,12).numFmt='0.0';
-          ws.getCell(L,12).font={bold:true,size:10};
-          ws.getCell(L,12).alignment={horizontal:'center'};
-          ws.getCell(L,9).alignment={wrapText:true};
-          ws.getRow(L).outlineLevel=2;
-          L++;
-        });
-      });
     });
 
     ws.autoFilter={from:{row:headerRowNum,column:1},to:{row:headerRowNum,column:NUM_COLS_DETALHE}};
     ws.views=[{state:'frozen',ySplit:headerRowNum}];
-    ws.properties.outlineProperties={summaryBelow:false,summaryRight:false};
+    ws.getColumn(1).width=22; ws.getColumn(2).width=12; ws.getColumn(3).width=11; ws.getColumn(4).width=26;
+    ws.getColumn(5).width=16; ws.getColumn(6).width=8; ws.getColumn(7).width=26; ws.getColumn(8).width=16;
+    ws.getColumn(9).width=40; ws.getColumn(10).width=22; ws.getColumn(11).width=16; ws.getColumn(12).width=9;
+    for(let c=13;c<=largura;c++) ws.getColumn(c).width=16;
 
     const buffer=await wb.xlsx.writeBuffer();
     const blob=new Blob([buffer],{type:'application/octet-stream'});
