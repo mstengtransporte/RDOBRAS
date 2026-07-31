@@ -2647,10 +2647,14 @@ async function buscarERestaurarDaNuvem(dataDe,dataAte){
     if(!rdosData||!rdosData.length) return{sucesso:0,falha:0,erro:null,vazio:true};
 
     const rdoIds=rdosData.map(r=>r.id);
-    const{data:osesData,error:erroOses}=await supabaseClient.from('rdo_oses').select('*').in('rdo_id',rdoIds);
+    // As duas buscas abaixo são independentes uma da outra — rodando ao mesmo tempo (em
+    // vez de uma esperar a outra terminar) corta bastante o tempo total de espera,
+    // principalmente em internet mais lenta ou com muitos RDOs acumulados.
+    const[{data:osesData,error:erroOses},{data:workersData,error:erroWorkers}]=await Promise.all([
+      supabaseClient.from('rdo_oses').select('*').in('rdo_id',rdoIds),
+      supabaseClient.from('rdo_workers').select('*').in('rdo_id',rdoIds)
+    ]);
     if(erroOses) return{sucesso:0,falha:0,erro:erroOses.message};
-
-    const{data:workersData,error:erroWorkers}=await supabaseClient.from('rdo_workers').select('*').in('rdo_id',rdoIds);
     if(erroWorkers) return{sucesso:0,falha:0,erro:erroWorkers.message};
 
     // Agrupa OSEs e funcionários pelo RDO a que pertencem, pra montar cada RDO de volta
