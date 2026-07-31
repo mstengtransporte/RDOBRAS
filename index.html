@@ -1408,6 +1408,7 @@ input.login-input,
       <span class="topbar-brand-tag">Montagem e Manutenção Industrial</span>
     </div>
     <div class="topbar-title">RDO — Diário de Obra PRO<small>Relatório Diário de Campo</small></div>
+    <div id="usuario-logado-badge" style="margin-left:auto;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.3);border-radius:20px;padding:5px 12px;font-size:11px;font-weight:800;color:#fff;white-space:nowrap;display:none"></div>
   </div>
   <div class="topbar-actions">
     <button class="btn btn-theme"   onclick="toggleTheme()">🌙 <span id="theme-label">Escuro</span></button>
@@ -1421,6 +1422,7 @@ input.login-input,
     <button class="btn admin-only-btn" style="background:#c2410c;color:#fff" onclick="abrirProjetos()" title="Total de horas de cada projeto, do início até a conclusão, em qualquer status">📁 <span>Horas/Projeto</span></button>
     <span class="topbar-divider"></span>
     <button class="btn btn-save"    onclick="salvarRDO()" title="Salva neste aparelho E envia pro admin">💾 <span>Salvar e Enviar</span></button>
+    <button class="btn" style="background:#d97706;color:#fff" onclick="verificarEReenviarPendentes()" title="Confere se algum RDO seu ficou só neste aparelho sem chegar no admin, e reenvia">🔄 <span>Reenviar</span></button>
     <button class="btn admin-only-btn" style="background:#0a6080;color:#fff" onclick="abrirGerenciarClientes()" title="Adicionar/remover clientes da lista de Obra/Projeto">👥 <span>Clientes</span></button>
     <button class="btn" id="btn-desfazer" style="background:#7c5a00;color:#fff" onclick="desfazerUltimaAcao()" title="Desfazer: volta ao estado de antes da última ação (excluir funcionário, criar novo RDO)">↩️ <span>Desfazer</span></button>
     <button class="btn btn-wpp-pdf" onclick="pdfParaWhatsApp()" title="Gera o PDF e já abre o compartilhamento (WhatsApp, Drive etc.)">📎 <span>PDF+WPP</span></button>
@@ -1985,7 +1987,7 @@ async function verificarSessaoEIniciar(){
   try{
     const{data:{session}}=await supabaseClient.auth.getSession();
     if(session){
-      await carregarPerfilUsuario();
+      await carregarPerfilUsuario(session.user);
       overlay?.remove();
       iniciarAppAposLogin();
     }
@@ -1997,10 +1999,12 @@ async function verificarSessaoEIniciar(){
   }
 }
 
-async function carregarPerfilUsuario(){
+async function carregarPerfilUsuario(userPreCarregado){
   const supabaseClient=getSupabaseClient();
   try{
-    const{data:{user}}=await supabaseClient.auth.getUser();
+    // Se quem chamou já tem o usuário em mãos (ex: acabou de checar a sessão), reaproveita
+    // — evita uma segunda ida à internet só pra perguntar de novo "quem é você mesmo?"
+    const user=userPreCarregado||(await supabaseClient.auth.getUser()).data.user;
     if(!user){usuarioAtual=null;return;}
     const{data:perfil}=await supabaseClient.from('perfis').select('*').eq('id',user.id).single();
     usuarioAtual={id:user.id,email:user.email,nome:perfil?.nome||user.email,papel:perfil?.papel||'encarregado',empresa_id:perfil?.empresa_id||null};
@@ -2033,13 +2037,13 @@ async function fazerLogin(){
   if(!supabaseClient){ erroEl.textContent='Sistema de login não configurado.'; return; }
   btn.disabled=true; btn.textContent='Entrando...';
   try{
-    const{error}=await supabaseClient.auth.signInWithPassword({email,password:senha});
+    const{data:loginData,error}=await supabaseClient.auth.signInWithPassword({email,password:senha});
     if(error){
       erroEl.textContent=error.message==='Invalid login credentials'?'E-mail ou senha incorretos.':error.message;
       btn.disabled=false; btn.textContent='Entrar';
       return;
     }
-    await carregarPerfilUsuario();
+    await carregarPerfilUsuario(loginData?.user);
 
     // Proteção contra "sujeira" de outro login no mesmo aparelho: se já tinha RDOs
     // salvos localmente de uma conta DIFERENTE da que acabou de entrar, avisa e
@@ -2103,13 +2107,16 @@ async function carregarClientes(){
 // Andamento, Horas/Projeto) quanto no campo Encarregado do próprio RDO (pra ninguém
 // digitar o nome errado e "criar" uma pessoa fantasma na contagem do Executivo).
 let encarregadosCache=[];
-async function carregarEncarregados(){
+let _ultimoCarregarEncarregados=0;
+async function carregarEncarregados(forcar=false){
   if(!usuarioAtual) return;
+  const agora=Date.now();
+  if(!forcar&&encarregadosCache.length&&agora-_ultimoCarregarEncarregados<60000){ popularSelectEncarregado(); return; }
   const supabaseClient=getSupabaseClient();
   if(!supabaseClient) return;
   try{
     const{data,error}=await supabaseClient.rpc('nomes_encarregados');
-    if(!error&&data) encarregadosCache=data.map(r=>({nome:r.nome}));
+    if(!error&&data){ encarregadosCache=data.map(r=>({nome:r.nome})); _ultimoCarregarEncarregados=agora; }
   }catch(e){console.error('carregarEncarregados error:',e);}
   popularSelectEncarregado();
 }
@@ -2939,8 +2946,19 @@ async function reconciliarRDOsApagadosPeloAdmin(){
   }catch(e){ console.error('reconciliarRDOsApagadosPeloAdmin error:',e); }
 }
 
+// Selo sempre visível na barra de cima, mostrando quem está logado — pra nunca acontecer
+// de alguém preencher RDO sem perceber que está numa conta que não é a dela.
+function atualizarSeloUsuarioLogado(){
+  const selo=document.getElementById('usuario-logado-badge');
+  if(!selo||!usuarioAtual) return;
+  const papelLabel=usuarioAtual.papel==='admin_mestre'?'Admin Mestre':'Encarregado';
+  selo.textContent=`👤 ${usuarioAtual.nome} · ${papelLabel}`;
+  selo.style.display='block';
+}
+
 function iniciarAppAposLogin(){
   aplicarPermissoesPorPapel();
+  atualizarSeloUsuarioLogado();
   if(typeof ajustarEspacoTopoTopbar==='function') setTimeout(ajustarEspacoTopoTopbar,50);
   carregarListas();
   document.getElementById('h-data').value = hojeLocal();
