@@ -2854,8 +2854,6 @@ async function reconciliarRDOsApagadosPeloAdmin(){
 
 function iniciarAppAposLogin(){
   aplicarPermissoesPorPapel();
-  carregarClientes();
-  carregarEncarregados();
   carregarListas();
   document.getElementById('h-data').value = hojeLocal();
   updateDiaSemana();
@@ -2869,7 +2867,15 @@ function iniciarAppAposLogin(){
   ajustarTextareasAuto();
   initAutoSave();
   atualizarDatalistNomesProjetos();
-  reconciliarRDOsApagadosPeloAdmin();
+  // As buscas abaixo não são urgentes pra tela aparecer (lista de clientes/encarregados
+  // pros campos de escolha, e a checagem de RDO apagado pelo admin) — adiadas pra rodar
+  // só depois que o RDO já está montado e visível na tela, assim a pessoa não fica
+  // esperando a rede pra começar a usar o app.
+  setTimeout(()=>{
+    carregarClientes();
+    carregarEncarregados();
+    reconciliarRDOsApagadosPeloAdmin();
+  },150);
 }
 document.addEventListener('DOMContentLoaded',()=>{
   verificarSessaoEIniciar();
@@ -6083,11 +6089,18 @@ function coletarDadosExtraEscopo(dataInicio,dataFim){
 // RDOs de TODOS os encarregados (não só os que já estão neste aparelho) — assim a soma
 // que ele vê sempre reflete todo mundo, sem precisar lembrar de clicar em "Restaurar da
 // nuvem" antes. Encarregado comum nunca chama isso (só vê o próprio, local, é suficiente).
-async function sincronizarSeAdmin(){
+let _ultimaSincronizacaoAdmin=0;
+async function sincronizarSeAdmin(forcar=false){
   if(!usuarioAtual||usuarioAtual.papel!=='admin_mestre') return;
+  // Evita buscar tudo de novo na nuvem se o admin acabou de trocar de painel há poucos
+  // segundos (ex: Extra Escopo → Andamento → Horas/Projeto em sequência) — usa o que já
+  // foi buscado há pouco, bem mais rápido pra navegar entre os painéis.
+  const agora=Date.now();
+  if(!forcar&&agora-_ultimaSincronizacaoAdmin<30000) return;
   showToast('☁️ Atualizando com dados de todos os encarregados...','#7c3aed');
   const{erro}=await buscarERestaurarDaNuvem(null,null);
   if(erro) showToast('⚠️ Não foi possível atualizar da nuvem agora — mostrando os dados que já estão neste aparelho.','#d97706');
+  else _ultimaSincronizacaoAdmin=agora;
 }
 
 async function abrirExtraEscopo(){
