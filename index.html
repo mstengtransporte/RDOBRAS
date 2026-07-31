@@ -1904,6 +1904,10 @@ input.login-input,
         ☁️ Use isso ao abrir o app num aparelho novo, ou se quiser garantir que este aparelho tem todos os RDOs que já foram salvos na nuvem por qualquer aparelho.
       </div>
       <button type="button" onclick="restaurarDoSupabase()" style="background:#7c3aed;color:#fff;border:2px solid #5b21b6;padding:14px 12px;font-size:13px;font-weight:900;cursor:pointer;text-transform:uppercase;min-height:48px">☁️ BUSCAR E RESTAURAR DA NUVEM</button>
+      <div style="font-size:10.5px;color:var(--text3);line-height:1.5;background:#fef3c7;padding:8px 10px;border-left:3px solid #d97706">
+        ⚠️ Se algum RDO seu tiver ficado só neste aparelho sem chegar no admin (por queda de internet, por exemplo), use o botão abaixo pra conferir e reenviar. Ele nunca apaga nem duplica nada — só reenvia o que realmente ainda não chegou.
+      </div>
+      <button type="button" onclick="verificarEReenviarPendentes()" style="background:#d97706;color:#fff;border:2px solid #92400e;padding:14px 12px;font-size:13px;font-weight:900;cursor:pointer;text-transform:uppercase;min-height:48px">🔄 CONFERIR E REENVIAR PENDENTES</button>
       <div style="border-top:2px dashed var(--border);margin:4px 0"></div>
       <div id="usuario-logado-info" style="font-size:11.5px;color:var(--text3);text-align:center"></div>
       <button type="button" onclick="fazerLogout()" style="background:transparent;color:#dc2626;border:2px solid #dc2626;padding:11px 12px;font-size:12.5px;font-weight:900;cursor:pointer;text-transform:uppercase;min-height:44px">🚪 SAIR DA CONTA</button>
@@ -2582,17 +2586,20 @@ async function syncSalvarSupabase(d){
   // Rascunho sem Obra escolhida ainda não vai pra nuvem — evita "RDO fantasma" sem nome
   // aparecendo pro admin só porque alguém abriu a tela e ainda não preencheu nada.
   // Continua salvando local normalmente (autoSilentSave cuida disso à parte).
-  if(!h.obra||!h.obra.trim()) return;
+  if(!h.obra||!h.obra.trim()) return{sucesso:false,semObra:true};
   const rdoKey=chaveRDO(h.data);
   const anterior=_filaSyncPorRdo[rdoKey]||Promise.resolve();
-  const atual=anterior.then(()=>_syncSalvarSupabaseReal(d,rdoKey)).catch(e=>console.error('syncSalvarSupabase (fila):',e));
+  const atual=anterior.then(()=>_syncSalvarSupabaseReal(d,rdoKey)).catch(e=>{
+    console.error('syncSalvarSupabase (fila):',e);
+    return{sucesso:false,erro:e?.message||'Erro desconhecido na fila de sincronização.'};
+  });
   _filaSyncPorRdo[rdoKey]=atual;
   return atual;
 }
 
 async function _syncSalvarSupabaseReal(d,rdoKey){
   const supabaseClient=getSupabaseClient();
-  if(!supabaseClient||!usuarioAtual) return; // sem login, não sincroniza (fica só local)
+  if(!supabaseClient||!usuarioAtual) return{sucesso:false,semLogin:true}; // sem login, não sincroniza (fica só local)
   try{
     const h=d.header||{};
     const{data:rdoRow,error:erroRdo}=await supabaseClient
@@ -2611,7 +2618,11 @@ async function _syncSalvarSupabaseReal(d,rdoKey){
       },{onConflict:'rdo_key'})
       .select('id')
       .single();
-    if(erroRdo||!rdoRow){console.error('Supabase erro ao salvar RDO:',erroRdo?.message||erroRdo?.hint||erroRdo?.code||JSON.stringify(erroRdo));return;}
+    if(erroRdo||!rdoRow){
+      const msg=erroRdo?.message||erroRdo?.hint||erroRdo?.code||'Erro desconhecido ao salvar o cabeçalho do RDO.';
+      console.error('Supabase erro ao salvar RDO:',msg);
+      return{sucesso:false,erro:msg};
+    }
     const rdoId=rdoRow.id;
 
     // Limpa OSEs/funcionários antigos desse RDO antes de reinserir a versão atual
@@ -2622,15 +2633,32 @@ async function _syncSalvarSupabaseReal(d,rdoKey){
       rdo_id:rdoId,ose_numero:idx+1,nome:o.name||null,
       status:o.status||'sem',descricao:o.desc||null,responsavel:o.resp||null
     }));
-    if(osesRows.length) await supabaseClient.from('rdo_oses').insert(osesRows);
+    if(osesRows.length){
+      const{error:erroOses}=await supabaseClient.from('rdo_oses').insert(osesRows);
+      if(erroOses){
+        console.error('Supabase erro ao salvar OSEs:',erroOses.message);
+        return{sucesso:false,erro:'Cabeçalho salvo, mas as OSEs não: '+erroOses.message};
+      }
+    }
 
     const workersRows=(d.workers||[])
       .filter(w=>w.name||(w.hrs||[]).some(v=>v))
       .map((w,idx)=>({
         rdo_id:rdoId,worker_index:idx,nome:w.name||null,funcao:w.func||null,hrs:w.hrs||[],hst:w.hst||[]
       }));
-    if(workersRows.length) await supabaseClient.from('rdo_workers').insert(workersRows);
-  }catch(e){console.error('Supabase syncSalvarSupabase error:',e?.message||JSON.stringify(e));}
+    if(workersRows.length){
+      const{error:erroWorkers}=await supabaseClient.from('rdo_workers').insert(workersRows);
+      if(erroWorkers){
+        console.error('Supabase erro ao salvar funcionários:',erroWorkers.message);
+        return{sucesso:false,erro:'Cabeçalho e OSEs salvos, mas os funcionários não: '+erroWorkers.message};
+      }
+    }
+    return{sucesso:true};
+  }catch(e){
+    const msg=e?.message||JSON.stringify(e);
+    console.error('Supabase syncSalvarSupabase error:',msg);
+    return{sucesso:false,erro:msg};
+  }
 }
 
 // Apaga um RDO do Supabase (OSEs e funcionários somem juntos, configurado
@@ -2840,6 +2868,52 @@ function exigirAdmin(){
 // admin na nuvem — se foi, remove ele daqui também, pra nunca ficar um RDO "fantasma"
 // no aparelho do encarregado mostrando algo que o admin já excluiu do sistema. Só olha
 // RDOs marcados como enviados (rascunho local nunca foi mandado, então nunca é tocado).
+// Ferramenta MANUAL (a pessoa clica de propósito) pra achar RDOs que estão marcados como
+// "enviados" neste aparelho mas que, por algum motivo (ex: bug antigo, queda de internet
+// no meio do envio), nunca chegaram de verdade no Supabase — e reenviar só esses.
+// Diferente da reconciliação automática de exclusão, essa aqui PERGUNTA antes de cada
+// reenvio, pra nunca reviver sem querer algo que o admin apagou de propósito.
+async function verificarEReenviarPendentes(){
+  const supabaseClient=getSupabaseClient();
+  if(!supabaseClient||!usuarioAtual){ showToast('Sem login/internet — não dá pra conferir agora.','#d97706'); return; }
+  showToast('🔍 Conferindo RDOs enviados...','#7c3aed');
+  try{
+    let enviados=[];
+    try{ enviados=JSON.parse(localStorage.getItem(CHAVE_ENVIADOS)||'[]'); }catch(e){}
+    if(!enviados.length){ showToast('Nenhum RDO marcado como enviado neste aparelho.','#6b7fa0'); return; }
+
+    const{data,error}=await supabaseClient.from('rdos').select('rdo_key').eq('criado_por',usuarioAtual.id);
+    if(error){ showToast('Erro ao consultar a nuvem: '+error.message,'#dc2626'); return; }
+    const existentesNaNuvem=new Set((data||[]).map(r=>r.rdo_key));
+
+    const pendentes=enviados.filter(key=>!existentesNaNuvem.has(key)&&localStorage.getItem(key));
+    if(!pendentes.length){ showToast('✓ Tudo certo — todos os seus RDOs enviados já estão na nuvem.','#16a34a'); return; }
+
+    const nomes=pendentes.map(key=>{
+      try{
+        const d=JSON.parse(localStorage.getItem(key));
+        return `• ${formatarDataBR(d?.header?.data)} — ${d?.header?.obra||'(sem obra)'} — ${d?.header?.nrdo||'(sem número)'}`;
+      }catch(e){ return `• ${key}`; }
+    }).join('\n');
+    const confirmar=confirm(`Encontrei ${pendentes.length} RDO(s) que estão salvos neste aparelho mas NÃO chegaram na nuvem:\n\n${nomes}\n\nQuer reenviar todos agora?`);
+    if(!confirmar) return;
+
+    let sucesso=0,falha=0;
+    for(const key of pendentes){
+      try{
+        const d=JSON.parse(localStorage.getItem(key));
+        const resultado=await syncSalvarSupabase(d);
+        if(resultado&&resultado.sucesso){ marcarComoEnviado(key); sucesso++; }
+        else falha++;
+      }catch(e){ falha++; }
+    }
+    showToast(`✓ ${sucesso} RDO(s) reenviado(s) com sucesso${falha?` — ${falha} ainda falharam, tente de novo`:''}.`,falha?'#d97706':'#16a34a');
+  }catch(e){
+    console.error('verificarEReenviarPendentes error:',e);
+    showToast('Erro ao conferir pendências.','#dc2626');
+  }
+}
+
 async function reconciliarRDOsApagadosPeloAdmin(){
   const supabaseClient=getSupabaseClient();
   if(!supabaseClient||!usuarioAtual) return;
@@ -3882,6 +3956,31 @@ async function salvarRDO(){
   if(!travarAcao('salvar')) return;
   try{
     const d=getFormData();
+
+    // CAMPOS OBRIGATÓRIOS: nunca deixa enviar um RDO pro admin sem essas informações
+    // básicas preenchidas — sem elas, o RDO não serve pra nada (admin não sabe de qual
+    // obra é, quem preencheu, nem quando), então trava aqui antes de qualquer coisa.
+    const faltando=[];
+    const camposObrigatorios=[
+      {id:'h-data',rotulo:'Data',valor:d.header.data},
+      {id:'h-dia',rotulo:'Dia da Semana',valor:document.getElementById('h-dia')?.value},
+      {id:'h-obra',rotulo:'Obra / Projeto (Cliente)',valor:d.header.obra},
+      {id:'h-disc',rotulo:'Disciplina',valor:d.header.disc},
+      {id:'h-enc',rotulo:'Encarregado',valor:d.header.enc}
+    ];
+    camposObrigatorios.forEach(c=>{
+      const el=document.getElementById(c.id);
+      if(!c.valor){
+        faltando.push(c.rotulo);
+        if(el){ el.style.outline='3px solid #dc2626'; el.style.outlineOffset='2px'; setTimeout(()=>{el.style.outline='';el.style.outlineOffset='';},6000); }
+      }
+    });
+    if(faltando.length){
+      showToast(`⚠️ Faltam preencher: ${faltando.join(', ')}`,'#dc2626');
+      alert(`Não é possível enviar o RDO — faltam preencher estes campos:\n\n${faltando.map(f=>'• '+f).join('\n')}\n\nEsses campos são obrigatórios: sem eles, o admin não consegue saber de qual obra é esse RDO nem quem preencheu, e ele não serve pra nada. Preencha e tente enviar de novo.`);
+      return;
+    }
+
     const key=chaveRDO(d.header.data);
 
     // CONFIRMAÇÃO EXPLÍCITA: nunca envia pro admin sem a pessoa confirmar de propósito —
@@ -3907,16 +4006,27 @@ async function salvarRDO(){
 
     localStorage.setItem(key,JSON.stringify(d));
     localStorage.setItem('rdo-last-key',key);
-    // Esse é o único lugar que manda pro admin de verdade — é um clique consciente da
-    // pessoa, não algo automático. Marca esse RDO como "enviado" (usado pela Busca, que só
-    // mostra RDOs já enviados) e sincroniza com a nuvem.
-    marcarComoEnviado(key);
-    if(getSupabaseClient()&&usuarioAtual){
+
+    if(!getSupabaseClient()||!usuarioAtual){
+      showToast('✓ RDO salvo neste aparelho. Sem login/internet no momento — envie assim que possível.','#d97706');
+      setTimeout(atualizarDatalistNomesProjetos,0);
+      setTimeout(renderizarRdosDoDia,0);
+      return;
+    }
+
+    showToast('☁️ Enviando pro admin...','#7c3aed');
+    const resultado=await syncSalvarSupabase(d);
+    if(resultado&&resultado.sucesso){
+      // Só marca como "enviado" (aparece na Busca) DEPOIS de confirmar que chegou na nuvem
+      // de verdade — antes disso o app avisava sucesso sem checar, e o RDO podia nunca ter
+      // chegado no admin sem ninguém perceber.
+      marcarComoEnviado(key);
       showToast('✓ RDO salvo e enviado ao admin!','#16a34a');
     }else{
-      showToast('✓ RDO salvo neste aparelho. Sem login/internet no momento — envie assim que possível.','#d97706');
+      const motivo=resultado?.erro||'Falha de conexão com o servidor.';
+      alert(`⚠️ O RDO foi salvo NESTE APARELHO, mas NÃO FOI ENVIADO ao admin.\n\nMotivo: ${motivo}\n\nConfira sua internet e clique em "Salvar e Enviar" de novo. Seus dados não foram perdidos, só ainda não chegaram na nuvem.`);
+      showToast('⚠️ Salvo local, mas NÃO enviado — confira sua internet e tente de novo.','#dc2626');
     }
-    syncSalvarSupabase(d);
     // Reescanear todo o histórico pra atualizar sugestões de nome de projeto pode ficar
     // pesado com muitos RDOs salvos (meses/anos de uso). Adiado pro próximo tick pra não
     // atrasar nem por um instante o retorno visual de "salvo" pro usuário.
