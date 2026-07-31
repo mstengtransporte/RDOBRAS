@@ -69,6 +69,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(0,0,0,.04) 39px,rgba(0,0,0,.04) 40px);
   background-size:40px 40px}
 
+/* ── PLACEHOLDER (texto de dica em campo vazio) SEMPRE VISÍVEL, NUNCA CLARO DEMAIS ── */
+body:not(.dark) input::placeholder,body:not(.dark) textarea::placeholder{color:#5a6a85!important;opacity:.85!important}
+body.dark input::placeholder,body.dark textarea::placeholder{color:#9fb0cc!important;opacity:.85!important}
+
 /* ── FORÇA TEXTO ESCURO E EM NEGRITO EM TODOS OS CAMPOS DE PREENCHIMENTO ── */
 input:not(.hrs),textarea:not(.hrs),select:not(.hrs-status):not(.ose-status-sel){font-weight:900!important}
 body:not(.dark) input:not(.hrs),body:not(.dark) textarea:not(.hrs),body:not(.dark) select:not(.hrs-status):not(.ose-status-sel){color:#0a1628!important}
@@ -516,7 +520,7 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
   min-width:120px;min-height:36px;text-transform:uppercase;letter-spacing:.5px
 }
 .ose-card.s-sem .ose-name-input{border-bottom-color:#b0bdd0;color:#0a1628;font-size:20px}
-.ose-name-input::placeholder{opacity:.4}
+.ose-name-input::placeholder{opacity:.75;color:#5a6a85}
 .ose-name-print-text{display:none}
 .ose-status-sel{
   padding:8px 14px;border:2px solid rgba(255,255,255,.4);
@@ -568,7 +572,7 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
   font-size:13px;font-weight:600;font-family:var(--font);outline:none;
   line-height:1.55;cursor:text;word-break:break-word;white-space:pre-wrap;text-transform:none
 }
-.ose-desc:empty:before{content:attr(data-placeholder);color:var(--text3);pointer-events:none;font-weight:600}
+.ose-desc:empty:before{content:attr(data-placeholder);color:#5a6a85;pointer-events:none;font-weight:700}
 .ose-desc img{max-width:100%;max-height:220px;display:block;margin:6px auto;height:auto}
 
 /* Footer da OSE */
@@ -586,6 +590,7 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
   white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;line-height:1.25
 }
 .ose-resp textarea:focus{border-bottom-color:var(--accent)}
+.ose-resp textarea::placeholder{color:#5a6a85;opacity:.85;font-weight:700}
 .ose-total-box{
   display:flex;align-items:center;gap:12px;padding:10px 18px;
   background:var(--hbg-solid);color:#fff;
@@ -1406,29 +1411,26 @@ input.login-input,
   </div>
   <div class="topbar-actions">
     <button class="btn btn-theme"   onclick="toggleTheme()">🌙 <span id="theme-label">Escuro</span></button>
+    <button class="btn btn-new"     onclick="novoRDO()">📄 <span>Novo</span></button>
     <button class="btn btn-search"  onclick="abrirBuscaRDO()">🔍 <span>Buscar</span></button>
+    <button class="btn" style="background:#dc2626;color:#fff" onclick="fazerLogout()" title="Sair da conta">🚪 <span>Sair</span></button>
+    <span class="topbar-divider"></span>
+    <button class="btn admin-only-btn" style="background:#9d174d;color:#fff" onclick="abrirPainelExecutivo()" title="Visão geral de todos os encarregados, ou individual de cada um">🎯 <span>Executivo</span></button>
+    <button class="btn admin-only-btn" style="background:#158038;color:#fff" onclick="abrirExtraEscopo()" title="Controle consolidado de todo o Extra Escopo/Adicional registrado">🟢 <span>Extra Escopo</span></button>
+    <button class="btn admin-only-btn" style="background:#1a52c8;color:#fff" onclick="abrirAndamento()" title="Controle consolidado de horas por projeto (Em Andamento)">🔵 <span>Andamento</span></button>
+    <button class="btn admin-only-btn" style="background:#c2410c;color:#fff" onclick="abrirProjetos()" title="Total de horas de cada projeto, do início até a conclusão, em qualquer status">📁 <span>Horas/Projeto</span></button>
+    <span class="topbar-divider"></span>
+    <button class="btn btn-save"    onclick="salvarRDO()" title="Salva neste aparelho E envia pro admin">💾 <span>Salvar e Enviar</span></button>
+    <button class="btn admin-only-btn" style="background:#0a6080;color:#fff" onclick="abrirGerenciarClientes()" title="Adicionar/remover clientes da lista de Obra/Projeto">👥 <span>Clientes</span></button>
+    <button class="btn" id="btn-desfazer" style="background:#7c5a00;color:#fff" onclick="desfazerUltimaAcao()" title="Desfazer: volta ao estado de antes da última ação (excluir funcionário, criar novo RDO)">↩️ <span>Desfazer</span></button>
+    <button class="btn btn-wpp-pdf" onclick="pdfParaWhatsApp()" title="Gera o PDF e já abre o compartilhamento (WhatsApp, Drive etc.)">📎 <span>PDF+WPP</span></button>
     <span class="topbar-divider"></span>
     <button class="btn" style="background:#0a6080;color:#fff" onclick="abrirGrafico()">📊 <span>H.H</span></button>
     <button class="btn" style="background:#0a7060;color:#fff" onclick="abrirFrases()">💬 <span>Frases</span></button>
-    <button class="btn" id="btn-rel-periodo" style="background:#6030bb;color:#fff" onclick="abrirMultiPDF()">📑 <span>Rel.Período</span></button>
+    <button class="btn admin-only-btn" id="btn-rel-periodo" style="background:#6030bb;color:#fff" onclick="abrirMultiPDF()">📑 <span>Rel.Período</span></button>
     <button class="btn" style="background:#374151;color:#fff" onclick="abrirBackup()">🗄️ <span>Backup</span></button>
-    <button class="btn" style="background:#dc2626;color:#fff" onclick="fazerLogout()" title="Sair da conta">🚪 <span>Sair</span></button>
-    <span class="topbar-divider" id="divisor-ferramentas-admin"></span>
-    <span id="ferramentas-admin-only" style="display:contents">
-    <button class="btn" style="background:#158038;color:#fff" onclick="abrirExtraEscopo()" title="Controle consolidado de todo o Extra Escopo/Adicional registrado">🟢 <span>Extra Escopo</span></button>
-    <button class="btn" style="background:#1a52c8;color:#fff" onclick="abrirAndamento()" title="Controle consolidado de horas por projeto (Em Andamento)">🔵 <span>Andamento</span></button>
-    <button class="btn" style="background:#c2410c;color:#fff" onclick="abrirProjetos()" title="Total de horas de cada projeto, do início até a conclusão, em qualquer status">📁 <span>Horas/Projeto</span></button>
-    <button class="btn" style="background:#374151;color:#fff" onclick="abrirCheckIntegridade()" title="Verifica inconsistências que podem causar erro na contagem de horas">🩺 <span>Check</span></button>
-    <button class="btn" style="background:#0a6080;color:#fff" onclick="abrirGerenciarClientes()" title="Adicionar/remover clientes da lista de Obra/Projeto">👥 <span>Clientes</span></button>
-    <button class="btn" style="background:#9d174d;color:#fff" onclick="abrirPainelExecutivo()" title="Visão geral de todos os encarregados, ou individual de cada um">🎯 <span>Executivo</span></button>
-    </span>
-    <span class="topbar-divider"></span>
-    <button class="btn btn-save"    onclick="salvarRDO()" title="Salva neste aparelho E envia pro admin">💾 <span>Salvar e Enviar</span></button>
-    <button class="btn btn-new"     onclick="novoRDO()">📄 <span>Novo</span></button>
-    <button class="btn" id="btn-desfazer" style="background:#7c5a00;color:#fff" onclick="desfazerUltimaAcao()" title="Desfazer: volta ao estado de antes da última ação (excluir funcionário, criar novo RDO)">↩️ <span>Desfazer</span></button>
-    <span class="topbar-divider"></span>
+    <button class="btn admin-only-btn" style="background:#374151;color:#fff" onclick="abrirCheckIntegridade()" title="Verifica inconsistências que podem causar erro na contagem de horas">🩺 <span>Check</span></button>
     <button class="btn btn-pdf"     onclick="exportarPDF()" title="Abre a tela de impressão para salvar como PDF">🖨️ <span>PDF</span></button>
-    <button class="btn btn-wpp-pdf" onclick="pdfParaWhatsApp()" title="Gera o PDF e já abre o compartilhamento (WhatsApp, Drive etc.)">📎 <span>PDF+WPP</span></button>
     <button class="btn btn-xlsx"    onclick="exportarXLSX()">📗 <span>Excel</span></button>
     <button class="btn btn-csv"     onclick="exportarCSV()">🧾 <span>CSV</span></button>
   </div>
@@ -2823,12 +2825,7 @@ const STATUS_LIST = [
 // ferramentas do dia a dia (criar/editar/exportar RDO), sem acesso à visão de conjunto.
 function aplicarPermissoesPorPapel(){
   const ehAdmin=usuarioAtual&&usuarioAtual.papel==='admin_mestre';
-  const relPeriodo=document.getElementById('btn-rel-periodo');
-  const ferramentasAdmin=document.getElementById('ferramentas-admin-only');
-  const divisor=document.getElementById('divisor-ferramentas-admin');
-  if(relPeriodo) relPeriodo.style.display=ehAdmin?'':'none';
-  if(ferramentasAdmin) ferramentasAdmin.style.display=ehAdmin?'contents':'none';
-  if(divisor) divisor.style.display=ehAdmin?'':'none';
+  document.querySelectorAll('.admin-only-btn').forEach(el=>{ el.style.display=ehAdmin?'':'none'; });
 }
 
 // Trava de segurança extra (além de esconder o botão): garante que essas telas não abrem
