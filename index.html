@@ -7245,44 +7245,139 @@ async function exportarBackupCompletoExcel(btn){
     wb.creator='Master Energy — Sistema de RDO';
     wb.created=new Date();
 
-    // ── ABA CAPA ──
-    const capa=wb.addWorksheet('📋 Capa',{properties:{tabColor:{argb:'FF1457C8'}}});
-    capa.mergeCells('A1:F3');
-    const tituloCell=capa.getCell('A1');
-    tituloCell.value='RDO MASTER ENERGY';
-    tituloCell.font={name:'Arial',size:26,bold:true,color:{argb:'FFFFFFFF'}};
-    tituloCell.alignment={vertical:'middle',horizontal:'center'};
-    for(let r=1;r<=3;r++) for(let c=1;c<=6;c++) capa.getCell(r,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
-
-    capa.mergeCells('A4:F4');
-    const subCell=capa.getCell('A4');
-    subCell.value='Montagem e Manutenção Industrial — Relatório Consolidado de RDOs';
-    subCell.font={name:'Arial',size:12,italic:true,color:{argb:'FF0A3C64'},bold:true};
-    subCell.alignment={horizontal:'center'};
-    capa.getRow(4).height=22;
-
     const totalHorasGeral=registros.reduce((s,r)=>s+r.horas,0);
     const rdosUnicos=new Set(registros.map(r=>r.nrdo+'|'+r.obra+'|'+r.data)).size;
     const obrasUnicas=new Set(registros.map(r=>normalizarObra(r.obra))).size;
     const encarregadosUnicos=new Set(registros.map(r=>r.encarregado)).size;
+
+    // ── Agregações usadas em várias tabelas da Capa ──
+    const porObra={},porEnc={},porDisc={};
+    const obraEncMatriz={},obraDiscMatriz={};
+    const nomesEncarregados=new Set(),nomesDisciplinas=new Set();
+    registros.forEach(r=>{
+      const chaveObra=normalizarObra(r.obra);
+      if(!porObra[chaveObra]) porObra[chaveObra]={nome:r.obra,horas:0,rdos:new Set()};
+      porObra[chaveObra].horas+=r.horas; porObra[chaveObra].rdos.add(r.nrdo+'|'+r.data);
+
+      if(!porEnc[r.encarregado]) porEnc[r.encarregado]={horas:0,rdos:new Set(),obras:new Set()};
+      porEnc[r.encarregado].horas+=r.horas; porEnc[r.encarregado].rdos.add(r.nrdo+'|'+r.data); porEnc[r.encarregado].obras.add(chaveObra);
+      nomesEncarregados.add(r.encarregado);
+
+      if(!porDisc[r.disc]) porDisc[r.disc]={horas:0,rdos:new Set()};
+      porDisc[r.disc].horas+=r.horas; porDisc[r.disc].rdos.add(r.nrdo+'|'+r.data);
+      nomesDisciplinas.add(r.disc);
+
+      if(!obraEncMatriz[chaveObra]) obraEncMatriz[chaveObra]={nomeObra:r.obra};
+      obraEncMatriz[chaveObra][r.encarregado]=(obraEncMatriz[chaveObra][r.encarregado]||0)+r.horas;
+
+      if(!obraDiscMatriz[chaveObra]) obraDiscMatriz[chaveObra]={nomeObra:r.obra};
+      obraDiscMatriz[chaveObra][r.disc]=(obraDiscMatriz[chaveObra][r.disc]||0)+r.horas;
+    });
+    const listaEncarregados=[...nomesEncarregados].sort();
+    const listaDisciplinas=[...nomesDisciplinas].sort();
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ABA 1 — CAPA: painel completo com todos os cruzamentos, antes da
+    // planilha de detalhe (por isso vem primeiro no arquivo).
+    // ═══════════════════════════════════════════════════════════════════
+    const capa=wb.addWorksheet('📋 Capa',{properties:{tabColor:{argb:'FF1457C8'}}});
+    let linhaAtual=1;
+
+    const larguraTotalCapa=Math.max(6,listaEncarregados.length+2,listaDisciplinas.length+2);
+    capa.mergeCells(1,1,3,larguraTotalCapa);
+    const tituloCell=capa.getCell(1,1);
+    tituloCell.value='RDO MASTER ENERGY';
+    tituloCell.font={name:'Arial',size:26,bold:true,color:{argb:'FFFFFFFF'}};
+    tituloCell.alignment={vertical:'middle',horizontal:'center'};
+    for(let r=1;r<=3;r++) for(let c=1;c<=larguraTotalCapa;c++) capa.getCell(r,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
+    linhaAtual=4;
+    capa.mergeCells(linhaAtual,1,linhaAtual,larguraTotalCapa);
+    const subCell=capa.getCell(linhaAtual,1);
+    subCell.value='Montagem e Manutenção Industrial — Relatório Consolidado de RDOs';
+    subCell.font={name:'Arial',size:12,italic:true,color:{argb:'FF0A3C64'},bold:true};
+    subCell.alignment={horizontal:'center'};
+    capa.getRow(linhaAtual).height=22;
+    linhaAtual+=2;
+
     const linhasInfo=[
       ['Gerado em:',new Date().toLocaleString('pt-BR')],
       ['Total de RDOs:',rdosUnicos],
       ['Total de Horas (H.H):',totalHorasGeral.toFixed(1)],
-      ['Obras diferentes:',obrasUnicas],
-      ['Encarregados envolvidos:',encarregadosUnicos]
+      ['Quantidade de Obras:',obrasUnicas],
+      ['Quantidade de Encarregados:',encarregadosUnicos],
+      ['Quantidade de Disciplinas:',listaDisciplinas.length]
     ];
-    linhasInfo.forEach((linha,idx)=>{
-      const r=6+idx;
-      capa.getCell(`A${r}`).value=linha[0];
-      capa.getCell(`A${r}`).font={bold:true,size:11};
-      capa.getCell(`B${r}`).value=linha[1];
-      capa.getCell(`B${r}`).font={size:11};
+    linhasInfo.forEach(linha=>{
+      capa.getCell(linhaAtual,1).value=linha[0];
+      capa.getCell(linhaAtual,1).font={bold:true,size:11};
+      capa.getCell(linhaAtual,2).value=linha[1];
+      capa.getCell(linhaAtual,2).font={size:11};
+      linhaAtual++;
     });
-    capa.columns=[{width:24},{width:26},{width:14},{width:14},{width:14},{width:14}];
+    linhaAtual+=1;
 
-    // ── ABA DETALHADO (a principal — formato "achatado" pra filtrar/organizar) ──
-    const det=wb.addWorksheet('📊 Detalhado',{properties:{tabColor:{argb:'FF158038'}}});
+    // Função auxiliar: desenha uma tabelinha de resumo (título + cabeçalho + linhas)
+    function desenharTabela(titulo,corTitulo,colunas,linhas){
+      capa.mergeCells(linhaAtual,1,linhaAtual,colunas.length);
+      const tCell=capa.getCell(linhaAtual,1);
+      tCell.value=titulo;
+      tCell.font={bold:true,size:12,color:{argb:'FFFFFFFF'}};
+      tCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:corTitulo}};
+      tCell.alignment={horizontal:'left',vertical:'middle'};
+      capa.getRow(linhaAtual).height=20;
+      linhaAtual++;
+      colunas.forEach((col,ci)=>{
+        const c=capa.getCell(linhaAtual,ci+1);
+        c.value=col;
+        c.font={bold:true,size:10};
+        c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE2E8F0'}};
+        c.alignment={horizontal:'center'};
+        c.border={bottom:{style:'thin',color:{argb:'FF999999'}}};
+      });
+      linhaAtual++;
+      linhas.forEach((linha,li)=>{
+        linha.forEach((val,ci)=>{
+          const c=capa.getCell(linhaAtual,ci+1);
+          c.value=val;
+          c.fill={type:'pattern',pattern:'solid',fgColor:{argb:li%2===0?'FFFFFFFF':'FFF5F7FA'}};
+          if(typeof val==='number'){ c.numFmt='0.0'; c.alignment={horizontal:'center'}; c.font={bold:true,size:10}; }
+          else c.font={size:10};
+        });
+        linhaAtual++;
+      });
+      linhaAtual+=2;
+    }
+
+    // Tabela: Resumo por Obra
+    desenharTabela('🏭 RESUMO POR OBRA','FFC2410C',['Obra/Cliente','Total de Horas','Qtd. de RDOs'],
+      Object.values(porObra).sort((a,b)=>b.horas-a.horas).map(o=>[o.nome,Number(o.horas.toFixed(1)),o.rdos.size]));
+
+    // Tabela: Resumo por Encarregado
+    desenharTabela('👷 RESUMO POR ENCARREGADO','FF9D174D',['Encarregado','Total de Horas','Qtd. de RDOs','Obras Diferentes'],
+      Object.entries(porEnc).sort((a,b)=>b[1].horas-a[1].horas).map(([nome,info])=>[nome,Number(info.horas.toFixed(1)),info.rdos.size,info.obras.size]));
+
+    // Tabela: Resumo por Disciplina
+    desenharTabela('🔧 RESUMO POR DISCIPLINA','FF6030BB',['Disciplina','Total de Horas','Qtd. de RDOs'],
+      Object.entries(porDisc).sort((a,b)=>b[1].horas-a[1].horas).map(([nome,info])=>[nome,Number(info.horas.toFixed(1)),info.rdos.size]));
+
+    // Tabela cruzada: Obra × Encarregado (horas)
+    desenharTabela('📊 HORAS POR OBRA × ENCARREGADO','FF158038',['Obra',...listaEncarregados],
+      Object.values(obraEncMatriz).map(linha=>[linha.nomeObra,...listaEncarregados.map(enc=>Number((linha[enc]||0).toFixed(1)))]));
+
+    // Tabela cruzada: Obra × Disciplina (horas) — "quantidade geral de cada disciplina por cada obra"
+    desenharTabela('📊 HORAS POR OBRA × DISCIPLINA','FF1A52C8',['Obra',...listaDisciplinas],
+      Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinas.map(disc=>Number((linha[disc]||0).toFixed(1)))]));
+
+    capa.getColumn(1).width=30;
+    for(let c=2;c<=larguraTotalCapa;c++) capa.getColumn(c).width=16;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ABA 2 — DETALHADO: uma planilha só, com Obra e Nº RDO AGRUPADOS (os
+    // botõezinhos "+/−" nativos do Excel, à esquerda) — clica pra abrir e
+    // ver funcionários, descrição e total de horas de cada RDO, sem
+    // precisar de outra planilha separada.
+    // ═══════════════════════════════════════════════════════════════════
+    const det=wb.addWorksheet('📊 Detalhado',{properties:{tabColor:{argb:'FF158038'},outlineProperties:{summaryBelow:false,summaryRight:false}}});
     det.columns=[
       {header:'DATA',key:'dataFmt',width:12},
       {header:'Nº RDO',key:'nrdo',width:11},
@@ -7306,83 +7401,75 @@ async function exportarBackupCompletoExcel(btn){
     det.getRow(1).height=28;
     det.views=[{state:'frozen',ySplit:1}];
 
-    registros.forEach((r,idx)=>{
-      const info=STATUS_INFO_EXCEL[r.status]||{nome:r.status.toUpperCase(),cor:'FF888888'};
-      const row=det.addRow({
-        dataFmt:formatarDataBR(r.data),nrdo:r.nrdo,obra:r.obra,disc:r.disc,encarregado:r.encarregado,
-        oseNumero:r.oseNumero,nomeProjeto:r.nomeProjeto,statusLabel:info.nome,
-        descricao:r.descricao,funcionario:r.funcionario,funcao:r.funcao,horas:r.horas
+    // Agrupa os registros em Obra → RDO → atividades (na ordem: obra com mais horas primeiro)
+    const porObraParaDetalhe={};
+    registros.forEach(r=>{
+      const chaveObra=normalizarObra(r.obra);
+      if(!porObraParaDetalhe[chaveObra]) porObraParaDetalhe[chaveObra]={nome:r.obra,horas:0,rdos:{}};
+      porObraParaDetalhe[chaveObra].horas+=r.horas;
+      const chaveRdo=r.nrdo+'|'+r.data;
+      if(!porObraParaDetalhe[chaveObra].rdos[chaveRdo]) porObraParaDetalhe[chaveObra].rdos[chaveRdo]={nrdo:r.nrdo,data:r.data,encarregado:r.encarregado,disc:r.disc,horas:0,atividades:[]};
+      porObraParaDetalhe[chaveObra].rdos[chaveRdo].horas+=r.horas;
+      porObraParaDetalhe[chaveObra].rdos[chaveRdo].atividades.push(r);
+    });
+
+    Object.values(porObraParaDetalhe).sort((a,b)=>b.horas-a.horas).forEach(obraInfo=>{
+      // Linha da OBRA (nível 0 — sempre visível, agrupa tudo abaixo dela)
+      const rdosDaObra=Object.values(obraInfo.rdos).sort((a,b)=>b.data.localeCompare(a.data));
+      const rowObra=det.addRow({dataFmt:'',nrdo:'',obra:`🏭 ${obraInfo.nome}`,disc:'',encarregado:'',oseNumero:'',nomeProjeto:'',statusLabel:'',descricao:`${rdosDaObra.length} RDO(s)`,funcionario:'',funcao:'',horas:Number(obraInfo.horas.toFixed(1))});
+      rowObra.eachCell(cell=>{
+        cell.font={bold:true,size:11.5,color:{argb:'FFFFFFFF'}};
+        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
       });
-      const corFundo=idx%2===0?'FFFFFFFF':'FFF0F3F8';
-      row.eachCell(cell=>{
-        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFundo}};
-        cell.border={bottom:{style:'thin',color:{argb:'FFDDDDDD'}}};
-        cell.font={size:10};
-        cell.alignment={vertical:'middle'};
+      rowObra.getCell('horas').numFmt='0.0';
+      rowObra.getCell('horas').alignment={horizontal:'center'};
+      rowObra.outlineLevel=0;
+
+      rdosDaObra.forEach(rdoInfo=>{
+        // Linha do RDO (nível 1 — some/aparece junto com a obra)
+        const info=STATUS_INFO_EXCEL[rdoInfo.atividades[0]?.status]||{cor:'FF888888'};
+        const rowRdo=det.addRow({
+          dataFmt:formatarDataBR(rdoInfo.data),nrdo:rdoInfo.nrdo,obra:`↳ ${obraInfo.nome}`,disc:rdoInfo.disc,
+          encarregado:rdoInfo.encarregado,oseNumero:'',nomeProjeto:'',statusLabel:'',
+          descricao:`${rdoInfo.atividades.length} atividade(s) lançada(s)`,funcionario:'',funcao:'',
+          horas:Number(rdoInfo.horas.toFixed(1))
+        });
+        rowRdo.eachCell(cell=>{
+          cell.font={bold:true,size:10.5};
+          cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFDCE6F5'}};
+        });
+        rowRdo.getCell('horas').numFmt='0.0';
+        rowRdo.getCell('horas').alignment={horizontal:'center'};
+        rowRdo.outlineLevel=1;
+
+        // Linhas de atividade (nível 2 — o detalhe completo: funcionário, descrição, status)
+        rdoInfo.atividades.forEach((r,idx)=>{
+          const infoStatus=STATUS_INFO_EXCEL[r.status]||{nome:r.status.toUpperCase(),cor:'FF888888'};
+          const rowDet=det.addRow({
+            dataFmt:formatarDataBR(r.data),nrdo:r.nrdo,obra:r.obra,disc:r.disc,encarregado:r.encarregado,
+            oseNumero:r.oseNumero,nomeProjeto:r.nomeProjeto,statusLabel:infoStatus.nome,
+            descricao:r.descricao,funcionario:r.funcionario,funcao:r.funcao,horas:r.horas
+          });
+          const corFundo=idx%2===0?'FFFFFFFF':'FFF7F9FC';
+          rowDet.eachCell(cell=>{
+            cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFundo}};
+            cell.border={bottom:{style:'thin',color:{argb:'FFE8E8E8'}}};
+            cell.font={size:9.5};
+            cell.alignment={vertical:'middle'};
+          });
+          const statusCell=rowDet.getCell('statusLabel');
+          statusCell.font={bold:true,color:{argb:'FFFFFFFF'},size:9};
+          statusCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:infoStatus.cor}};
+          statusCell.alignment={horizontal:'center',vertical:'middle'};
+          rowDet.getCell('horas').numFmt='0.0';
+          rowDet.getCell('horas').font={bold:true,size:10};
+          rowDet.getCell('horas').alignment={horizontal:'center'};
+          rowDet.getCell('descricao').alignment={wrapText:true};
+          rowDet.outlineLevel=2;
+        });
       });
-      const statusCell=row.getCell('statusLabel');
-      statusCell.font={bold:true,color:{argb:'FFFFFFFF'},size:9.5};
-      statusCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:info.cor}};
-      statusCell.alignment={horizontal:'center',vertical:'middle'};
-      row.getCell('horas').numFmt='0.0';
-      row.getCell('horas').font={bold:true,size:10.5};
-      row.getCell('horas').alignment={horizontal:'center'};
-      row.getCell('descricao').alignment={wrapText:true};
     });
     det.autoFilter={from:'A1',to:'L1'};
-
-    // ── ABA POR OBRA ──
-    const porObra={};
-    registros.forEach(r=>{
-      const chave=normalizarObra(r.obra);
-      if(!porObra[chave]) porObra[chave]={nome:r.obra,horas:0,rdos:new Set()};
-      porObra[chave].horas+=r.horas;
-      porObra[chave].rdos.add(r.nrdo+'|'+r.data);
-    });
-    const abaObra=wb.addWorksheet('🏭 Por Obra',{properties:{tabColor:{argb:'FFC2410C'}}});
-    abaObra.columns=[{header:'OBRA / CLIENTE',key:'obra',width:32},{header:'TOTAL DE HORAS',key:'horas',width:16},{header:'QTD. DE RDOS',key:'rdos',width:14}];
-    abaObra.getRow(1).eachCell(cell=>{
-      cell.font={bold:true,color:{argb:'FFFFFFFF'}};
-      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFC2410C'}};
-      cell.alignment={horizontal:'center',vertical:'middle'};
-    });
-    abaObra.getRow(1).height=22;
-    Object.values(porObra).sort((a,b)=>b.horas-a.horas).forEach((o,idx)=>{
-      const row=abaObra.addRow({obra:o.nome,horas:Number(o.horas.toFixed(1)),rdos:o.rdos.size});
-      row.eachCell(cell=>{ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:idx%2===0?'FFFFFFFF':'FFFDF0E6'}}; cell.border={bottom:{style:'thin',color:{argb:'FFEEEEEE'}}}; });
-      row.getCell('horas').numFmt='0.0';
-      row.getCell('horas').font={bold:true};
-      row.getCell('horas').alignment={horizontal:'center'};
-      row.getCell('rdos').alignment={horizontal:'center'};
-    });
-    abaObra.autoFilter={from:'A1',to:'C1'};
-
-    // ── ABA POR ENCARREGADO ──
-    const porEnc={};
-    registros.forEach(r=>{
-      if(!porEnc[r.encarregado]) porEnc[r.encarregado]={horas:0,rdos:new Set(),obras:new Set()};
-      porEnc[r.encarregado].horas+=r.horas;
-      porEnc[r.encarregado].rdos.add(r.nrdo+'|'+r.data);
-      porEnc[r.encarregado].obras.add(normalizarObra(r.obra));
-    });
-    const abaEnc=wb.addWorksheet('👷 Por Encarregado',{properties:{tabColor:{argb:'FF9D174D'}}});
-    abaEnc.columns=[{header:'ENCARREGADO',key:'nome',width:26},{header:'TOTAL DE HORAS',key:'horas',width:16},{header:'QTD. DE RDOS',key:'rdos',width:14},{header:'OBRAS DIFERENTES',key:'obras',width:16}];
-    abaEnc.getRow(1).eachCell(cell=>{
-      cell.font={bold:true,color:{argb:'FFFFFFFF'}};
-      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF9D174D'}};
-      cell.alignment={horizontal:'center',vertical:'middle'};
-    });
-    abaEnc.getRow(1).height=22;
-    Object.entries(porEnc).sort((a,b)=>b[1].horas-a[1].horas).forEach(([nome,info],idx)=>{
-      const row=abaEnc.addRow({nome,horas:Number(info.horas.toFixed(1)),rdos:info.rdos.size,obras:info.obras.size});
-      row.eachCell(cell=>{ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:idx%2===0?'FFFFFFFF':'FFFCE4EC'}}; cell.border={bottom:{style:'thin',color:{argb:'FFEEEEEE'}}}; });
-      row.getCell('horas').numFmt='0.0';
-      row.getCell('horas').font={bold:true};
-      row.getCell('horas').alignment={horizontal:'center'};
-      row.getCell('rdos').alignment={horizontal:'center'};
-      row.getCell('obras').alignment={horizontal:'center'};
-    });
-    abaEnc.autoFilter={from:'A1',to:'D1'};
 
     const buffer=await wb.xlsx.writeBuffer();
     const blob=new Blob([buffer],{type:'application/octet-stream'});
