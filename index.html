@@ -6161,7 +6161,7 @@ function renderizarExtraEscopo(){
   const grupos={};
   dados.forEach(r=>{
     const chave=`${r.data}|${r.ose}`;
-    if(!grupos[chave]) grupos[chave]={chave,data:r.data,obra:r.obra,encarregado:r.encarregado,ose:r.ose,servico:r.servico,descricao:r.descricao,trabalhadores:[]};
+    if(!grupos[chave]) grupos[chave]={chave,data:r.data,obra:r.obra,disc:r.disc,nrdo:r.nrdo,encarregado:r.encarregado,ose:r.ose,servico:r.servico,descricao:r.descricao,trabalhadores:[]};
     grupos[chave].trabalhadores.push({nome:r.funcionario,funcao:r.funcao,horas:r.horas});
   });
   extraEscopoGruposAtuais=grupos; // pros botões de deletar/compartilhar por dia e por funcionário
@@ -6198,7 +6198,7 @@ function renderizarExtraEscopo(){
       return `<div class="ee-dia">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
           <div>
-            <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="color:#158038;font-weight:900">${g.ose}</span><br>
+            <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="font-weight:800">🔧 ${g.disc}</span> — <span style="color:#158038;font-weight:900">${g.ose}</span> <span style="opacity:.7;font-weight:400">(${g.nrdo})</span><br>
             <span style="color:var(--text2)">${g.descricao}</span><br>
             ${trabList}
           </div>
@@ -6555,6 +6555,8 @@ function coletarDadosAndamento(dataInicio,dataFim){
             data:h.data,
             dataFmt:formatarDataBR(h.data),
             obra:h.obra||'—',
+            disc:(h.disc||'(SEM DISCIPLINA)').toUpperCase(),
+            nrdo:h.nrdo||'—',
             encarregado:(h.enc||'—').toUpperCase(),
             ose:`OSE ${String(idx+1).padStart(2,'0')}`,
             servico:(o.name||'(SEM NOME DE PROJETO PREENCHIDO)').toUpperCase(),
@@ -6616,7 +6618,7 @@ function renderizarAndamento(){
   const dias={};
   dados.forEach(r=>{
     const chave=`${r.data}|${r.ose}`;
-    if(!dias[chave]) dias[chave]={chave,data:r.data,obra:r.obra,encarregado:r.encarregado,ose:r.ose,servico:r.servico,descricao:r.descricao,trabalhadores:[]};
+    if(!dias[chave]) dias[chave]={chave,data:r.data,obra:r.obra,disc:r.disc,nrdo:r.nrdo,encarregado:r.encarregado,ose:r.ose,servico:r.servico,descricao:r.descricao,trabalhadores:[]};
     dias[chave].trabalhadores.push({nome:r.funcionario,funcao:r.funcao,horas:r.horas});
   });
   andamentoGruposAtuais=dias;
@@ -6651,7 +6653,7 @@ function renderizarAndamento(){
       return `<div class="an-dia">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
           <div>
-            <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="color:#1a52c8;font-weight:900">${g.ose}</span><br>
+            <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="font-weight:800">🔧 ${g.disc}</span> — <span style="color:#1a52c8;font-weight:900">${g.ose}</span> <span style="opacity:.7;font-weight:400">(${g.nrdo})</span><br>
             <span style="color:var(--text2)">${g.descricao}</span><br>
             ${trabList}
           </div>
