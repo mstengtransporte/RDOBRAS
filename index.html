@@ -15,6 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js" defer></script>
 <style>
 /* ═══════════════════════════════════════════════════════════
    RDO MASTER ENERGY — ULTRA PRO DESIGN
@@ -1913,6 +1914,7 @@ input.login-input,
         ⚠️ Se algum RDO seu tiver ficado só neste aparelho sem chegar no admin (por queda de internet, por exemplo), use o botão abaixo pra conferir e reenviar. Ele nunca apaga nem duplica nada — só reenvia o que realmente ainda não chegou.
       </div>
       <button type="button" onclick="verificarEReenviarPendentes()" style="background:#d97706;color:#fff;border:2px solid #92400e;padding:14px 12px;font-size:13px;font-weight:900;cursor:pointer;text-transform:uppercase;min-height:48px">🔄 CONFERIR E REENVIAR PENDENTES</button>
+      <button type="button" class="admin-only-btn" onclick="exportarBackupCompletoExcel(this)" style="background:#0d5228;color:#fff;border:2px solid #063d1c;padding:14px 12px;font-size:13px;font-weight:900;cursor:pointer;text-transform:uppercase;min-height:48px">📗 BACKUP COMPLETO EM EXCEL (TODOS OS RDOs)</button>
       <div style="border-top:2px dashed var(--border);margin:4px 0"></div>
       <div id="usuario-logado-info" style="font-size:11.5px;color:var(--text3);text-align:center"></div>
       <button type="button" onclick="fazerLogout()" style="background:transparent;color:#dc2626;border:2px solid #dc2626;padding:11px 12px;font-size:12.5px;font-weight:900;cursor:pointer;text-transform:uppercase;min-height:44px">🚪 SAIR DA CONTA</button>
@@ -7179,6 +7181,224 @@ function renderizarProjetos(){
 }
 
 let projetosAtuaisCache={};
+
+// ═══════════════════════════════════════════════════════════════════════
+// BACKUP COMPLETO EM EXCEL — todos os RDOs de todos os encarregados, numa
+// tabela "achatada" (uma linha por funcionário+OSE), fácil de filtrar e
+// organizar dentro do próprio Excel, com cores por status, cabeçalho
+// estilizado, linhas alternadas, e abas de resumo por Obra e por Encarregado.
+// ═══════════════════════════════════════════════════════════════════════
+const STATUS_INFO_EXCEL={
+  and:{nome:'EM ANDAMENTO',cor:'FF1A52C8'},
+  ext:{nome:'EXTRA ESCOPO',cor:'FF158038'},
+  conc:{nome:'CONCLUÍDO',cor:'FF6830CC'},
+  par:{nome:'PARALISADO',cor:'FFE07010'},
+  blq:{nome:'FALTA/SAIU CEDO',cor:'FFCC2020'}
+};
+
+// Varre TODOS os RDOs e devolve uma linha pra cada combinação de
+// funcionário+OSE — é esse formato "achatado" (sem agrupamento visual) que
+// deixa o Excel filtrar/ordenar/somar sozinho, sem precisar de fórmula.
+function coletarTodosOsRegistrosFlat(){
+  const registros=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    let d;
+    try{ d=JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
+    const h=d&&d.header;
+    if(!h||!h.data) continue;
+    (d.oses||[]).forEach((o,idx)=>{
+      if(!o.status||o.status==='sem') return;
+      const descTexto=(o.desc||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim()||'—';
+      const base={
+        data:h.data,nrdo:h.nrdo||'—',obra:h.obra||'—',disc:h.disc||'(SEM DISCIPLINA)',
+        encarregado:h.enc||'—',oseNumero:idx+1,nomeProjeto:(o.name||'—').toUpperCase(),
+        status:o.status,descricao:descTexto.toUpperCase()
+      };
+      const trabalhadoresComHora=(d.workers||[]).filter(w=>parseHrs((w.hrs||[])[idx]||'')>0);
+      if(!trabalhadoresComHora.length){
+        registros.push({...base,funcionario:'—',funcao:'—',horas:0});
+        return;
+      }
+      trabalhadoresComHora.forEach(w=>{
+        registros.push({...base,funcionario:(w.name||'—').toUpperCase(),funcao:(w.func||'—').toUpperCase(),horas:parseHrs((w.hrs||[])[idx]||'')});
+      });
+    });
+  }
+  registros.sort((a,b)=> a.data===b.data ? (a.obra||'').localeCompare(b.obra||'') : a.data.localeCompare(b.data));
+  return registros;
+}
+
+async function exportarBackupCompletoExcel(btn){
+  if(!exigirAdmin()) return;
+  if(typeof ExcelJS==='undefined'){ showToast('Biblioteca de Excel ainda carregando — espera 2 segundos e tenta de novo.','#d97706'); return; }
+  const textoOriginal=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Gerando...'; }
+  try{
+    await sincronizarSeAdmin(true);
+    autoSilentSave();
+    const registros=coletarTodosOsRegistrosFlat();
+    if(!registros.length){ showToast('Nenhum RDO com atividade lançada encontrado.','#d97706'); return; }
+
+    const wb=new ExcelJS.Workbook();
+    wb.creator='Master Energy — Sistema de RDO';
+    wb.created=new Date();
+
+    // ── ABA CAPA ──
+    const capa=wb.addWorksheet('📋 Capa',{properties:{tabColor:{argb:'FF1457C8'}}});
+    capa.mergeCells('A1:F3');
+    const tituloCell=capa.getCell('A1');
+    tituloCell.value='RDO MASTER ENERGY';
+    tituloCell.font={name:'Arial',size:26,bold:true,color:{argb:'FFFFFFFF'}};
+    tituloCell.alignment={vertical:'middle',horizontal:'center'};
+    for(let r=1;r<=3;r++) for(let c=1;c<=6;c++) capa.getCell(r,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
+
+    capa.mergeCells('A4:F4');
+    const subCell=capa.getCell('A4');
+    subCell.value='Montagem e Manutenção Industrial — Relatório Consolidado de RDOs';
+    subCell.font={name:'Arial',size:12,italic:true,color:{argb:'FF0A3C64'},bold:true};
+    subCell.alignment={horizontal:'center'};
+    capa.getRow(4).height=22;
+
+    const totalHorasGeral=registros.reduce((s,r)=>s+r.horas,0);
+    const rdosUnicos=new Set(registros.map(r=>r.nrdo+'|'+r.obra+'|'+r.data)).size;
+    const obrasUnicas=new Set(registros.map(r=>normalizarObra(r.obra))).size;
+    const encarregadosUnicos=new Set(registros.map(r=>r.encarregado)).size;
+    const linhasInfo=[
+      ['Gerado em:',new Date().toLocaleString('pt-BR')],
+      ['Total de RDOs:',rdosUnicos],
+      ['Total de Horas (H.H):',totalHorasGeral.toFixed(1)],
+      ['Obras diferentes:',obrasUnicas],
+      ['Encarregados envolvidos:',encarregadosUnicos]
+    ];
+    linhasInfo.forEach((linha,idx)=>{
+      const r=6+idx;
+      capa.getCell(`A${r}`).value=linha[0];
+      capa.getCell(`A${r}`).font={bold:true,size:11};
+      capa.getCell(`B${r}`).value=linha[1];
+      capa.getCell(`B${r}`).font={size:11};
+    });
+    capa.columns=[{width:24},{width:26},{width:14},{width:14},{width:14},{width:14}];
+
+    // ── ABA DETALHADO (a principal — formato "achatado" pra filtrar/organizar) ──
+    const det=wb.addWorksheet('📊 Detalhado',{properties:{tabColor:{argb:'FF158038'}}});
+    det.columns=[
+      {header:'DATA',key:'dataFmt',width:12},
+      {header:'Nº RDO',key:'nrdo',width:11},
+      {header:'OBRA / CLIENTE',key:'obra',width:26},
+      {header:'DISCIPLINA',key:'disc',width:16},
+      {header:'ENCARREGADO',key:'encarregado',width:22},
+      {header:'Nº OSE',key:'oseNumero',width:8},
+      {header:'NOME DO PROJETO (OSE)',key:'nomeProjeto',width:26},
+      {header:'STATUS',key:'statusLabel',width:16},
+      {header:'DESCRIÇÃO DOS SERVIÇOS',key:'descricao',width:42},
+      {header:'FUNCIONÁRIO',key:'funcionario',width:22},
+      {header:'FUNÇÃO',key:'funcao',width:16},
+      {header:'HORAS',key:'horas',width:9}
+    ];
+    det.getRow(1).eachCell(cell=>{
+      cell.font={bold:true,color:{argb:'FFFFFFFF'},size:10.5};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
+      cell.alignment={vertical:'middle',horizontal:'center',wrapText:true};
+      cell.border={bottom:{style:'medium',color:{argb:'FF000000'}}};
+    });
+    det.getRow(1).height=28;
+    det.views=[{state:'frozen',ySplit:1}];
+
+    registros.forEach((r,idx)=>{
+      const info=STATUS_INFO_EXCEL[r.status]||{nome:r.status.toUpperCase(),cor:'FF888888'};
+      const row=det.addRow({
+        dataFmt:formatarDataBR(r.data),nrdo:r.nrdo,obra:r.obra,disc:r.disc,encarregado:r.encarregado,
+        oseNumero:r.oseNumero,nomeProjeto:r.nomeProjeto,statusLabel:info.nome,
+        descricao:r.descricao,funcionario:r.funcionario,funcao:r.funcao,horas:r.horas
+      });
+      const corFundo=idx%2===0?'FFFFFFFF':'FFF0F3F8';
+      row.eachCell(cell=>{
+        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFundo}};
+        cell.border={bottom:{style:'thin',color:{argb:'FFDDDDDD'}}};
+        cell.font={size:10};
+        cell.alignment={vertical:'middle'};
+      });
+      const statusCell=row.getCell('statusLabel');
+      statusCell.font={bold:true,color:{argb:'FFFFFFFF'},size:9.5};
+      statusCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:info.cor}};
+      statusCell.alignment={horizontal:'center',vertical:'middle'};
+      row.getCell('horas').numFmt='0.0';
+      row.getCell('horas').font={bold:true,size:10.5};
+      row.getCell('horas').alignment={horizontal:'center'};
+      row.getCell('descricao').alignment={wrapText:true};
+    });
+    det.autoFilter={from:'A1',to:'L1'};
+
+    // ── ABA POR OBRA ──
+    const porObra={};
+    registros.forEach(r=>{
+      const chave=normalizarObra(r.obra);
+      if(!porObra[chave]) porObra[chave]={nome:r.obra,horas:0,rdos:new Set()};
+      porObra[chave].horas+=r.horas;
+      porObra[chave].rdos.add(r.nrdo+'|'+r.data);
+    });
+    const abaObra=wb.addWorksheet('🏭 Por Obra',{properties:{tabColor:{argb:'FFC2410C'}}});
+    abaObra.columns=[{header:'OBRA / CLIENTE',key:'obra',width:32},{header:'TOTAL DE HORAS',key:'horas',width:16},{header:'QTD. DE RDOS',key:'rdos',width:14}];
+    abaObra.getRow(1).eachCell(cell=>{
+      cell.font={bold:true,color:{argb:'FFFFFFFF'}};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFC2410C'}};
+      cell.alignment={horizontal:'center',vertical:'middle'};
+    });
+    abaObra.getRow(1).height=22;
+    Object.values(porObra).sort((a,b)=>b.horas-a.horas).forEach((o,idx)=>{
+      const row=abaObra.addRow({obra:o.nome,horas:Number(o.horas.toFixed(1)),rdos:o.rdos.size});
+      row.eachCell(cell=>{ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:idx%2===0?'FFFFFFFF':'FFFDF0E6'}}; cell.border={bottom:{style:'thin',color:{argb:'FFEEEEEE'}}}; });
+      row.getCell('horas').numFmt='0.0';
+      row.getCell('horas').font={bold:true};
+      row.getCell('horas').alignment={horizontal:'center'};
+      row.getCell('rdos').alignment={horizontal:'center'};
+    });
+    abaObra.autoFilter={from:'A1',to:'C1'};
+
+    // ── ABA POR ENCARREGADO ──
+    const porEnc={};
+    registros.forEach(r=>{
+      if(!porEnc[r.encarregado]) porEnc[r.encarregado]={horas:0,rdos:new Set(),obras:new Set()};
+      porEnc[r.encarregado].horas+=r.horas;
+      porEnc[r.encarregado].rdos.add(r.nrdo+'|'+r.data);
+      porEnc[r.encarregado].obras.add(normalizarObra(r.obra));
+    });
+    const abaEnc=wb.addWorksheet('👷 Por Encarregado',{properties:{tabColor:{argb:'FF9D174D'}}});
+    abaEnc.columns=[{header:'ENCARREGADO',key:'nome',width:26},{header:'TOTAL DE HORAS',key:'horas',width:16},{header:'QTD. DE RDOS',key:'rdos',width:14},{header:'OBRAS DIFERENTES',key:'obras',width:16}];
+    abaEnc.getRow(1).eachCell(cell=>{
+      cell.font={bold:true,color:{argb:'FFFFFFFF'}};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF9D174D'}};
+      cell.alignment={horizontal:'center',vertical:'middle'};
+    });
+    abaEnc.getRow(1).height=22;
+    Object.entries(porEnc).sort((a,b)=>b[1].horas-a[1].horas).forEach(([nome,info],idx)=>{
+      const row=abaEnc.addRow({nome,horas:Number(info.horas.toFixed(1)),rdos:info.rdos.size,obras:info.obras.size});
+      row.eachCell(cell=>{ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:idx%2===0?'FFFFFFFF':'FFFCE4EC'}}; cell.border={bottom:{style:'thin',color:{argb:'FFEEEEEE'}}}; });
+      row.getCell('horas').numFmt='0.0';
+      row.getCell('horas').font={bold:true};
+      row.getCell('horas').alignment={horizontal:'center'};
+      row.getCell('rdos').alignment={horizontal:'center'};
+      row.getCell('obras').alignment={horizontal:'center'};
+    });
+    abaEnc.autoFilter={from:'A1',to:'D1'};
+
+    const buffer=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buffer],{type:'application/octet-stream'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`Backup_Completo_RDOs_MasterEnergy_${hojeLocal()}.xlsx`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+    showToast(`✓ Backup completo gerado! ${rdosUnicos} RDO(s), ${totalHorasGeral.toFixed(1)}h no total.`,'#16a34a');
+  }catch(e){
+    console.error('exportarBackupCompletoExcel error:',e);
+    showToast('Erro ao gerar o backup completo.','#dc2626');
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=textoOriginal; }
+  }
+}
 
 function exportarProjetosExcel(){
   const de=document.getElementById('pj-de').value||null;
