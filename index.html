@@ -94,7 +94,7 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
   background:var(--hbg-solid);
   padding:8px 16px;
   display:flex;flex-direction:column;gap:8px;
-  position:sticky;top:0;z-index:200;
+  position:fixed;top:0;left:0;right:0;z-index:200;
   border-bottom:3px solid var(--accent);
   box-shadow:0 4px 20px rgba(0,0,0,.6)
 }
@@ -2867,6 +2867,7 @@ async function reconciliarRDOsApagadosPeloAdmin(){
 
 function iniciarAppAposLogin(){
   aplicarPermissoesPorPapel();
+  if(typeof ajustarEspacoTopoTopbar==='function') setTimeout(ajustarEspacoTopoTopbar,50);
   carregarListas();
   document.getElementById('h-data').value = hojeLocal();
   updateDiaSemana();
@@ -7369,6 +7370,23 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('./sw.js').catch(e=>console.log('SW não registrado:',e));
   });
 }
+
+// A barra de cima agora é "fixed" (fica sempre visível, mesmo rolando a página) — isso
+// tira ela do fluxo normal, então o resto da página precisa de um espaço reservado no
+// topo do mesmo tamanho dela, senão o conteúdo nasce escondido atrás da barra. Calcula
+// esse espaço automaticamente (a altura da barra muda entre celular e computador).
+function ajustarEspacoTopoTopbar(){
+  const topbar=document.querySelector('.topbar');
+  if(topbar) document.body.style.paddingTop=topbar.offsetHeight+'px';
+}
+window.addEventListener('load',ajustarEspacoTopoTopbar);
+window.addEventListener('resize',()=>{
+  clearTimeout(window._resizeTopbarT);
+  window._resizeTopbarT=setTimeout(ajustarEspacoTopoTopbar,150);
+});
+// Roda também assim que o script termina de montar a página (sem esperar todas as
+// imagens carregarem, como o evento "load" espera) — deixa o espaço certo mais cedo.
+ajustarEspacoTopoTopbar();
 
 // PWA: pergunta sozinho se a pessoa quer instalar o app (Android/Chrome e computador
 // com Chrome/Edge). No iPhone a Apple não permite esse aviso automático — lá continua
