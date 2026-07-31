@@ -196,9 +196,10 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
 }
 .hfield input,.hfield textarea,.hfield select{
   background:transparent;border:none;padding:2px 0;
-  font-size:14px;font-weight:900;color:var(--text);width:100%;max-width:100%;outline:none;
+  font-size:13px;font-weight:900;color:var(--text);width:100%;max-width:100%;outline:none;
   min-height:26px;text-transform:uppercase;box-sizing:border-box
 }
+.hfield select{text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
 .hfield textarea{
   font-family:inherit;resize:none;overflow:hidden;box-sizing:border-box;
   white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;line-height:1.25
@@ -852,6 +853,7 @@ input.login-input,
   .topbar-actions{overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap}
   .topbar-title{display:none}
   .topbar-brand-tag{display:none}
+  .hfield select{font-size:12px}
   .btn{padding:6px 5px;font-size:17px;gap:1px;flex-direction:column;min-width:54px;line-height:1.1;flex-shrink:0}
   .btn span{display:block;font-size:7.5px;font-weight:800;white-space:nowrap;letter-spacing:.2px}
   .page{padding:8px 6px}
@@ -1463,7 +1465,7 @@ input.login-input,
         <div style="flex:1;padding:5px 14px;border-right:2px solid #000;display:flex;flex-direction:column;gap:2px"><label style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Data</label><input type="date" id="h-data" style="background:transparent;border:none;border-bottom:2px solid #000;padding:2px 0;font-size:15px;font-weight:900;color:var(--text);width:100%;outline:none;min-height:28px"></div>
         <div style="flex:1;padding:5px 14px;display:flex;flex-direction:column;gap:2px"><label style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Dia da Semana</label><input type="text" id="h-dia" readonly style="background:transparent;border:none;border-bottom:2px solid #000;padding:2px 0;font-size:15px;font-weight:900;color:var(--text);width:100%;outline:none;min-height:28px"></div>
       </div>
-      <div class="hfield"><label>Obra / Projeto (Cliente)</label><select id="h-obra" onchange="onMudarClienteSelecionado()" onblur="revalidarNRDOSeNovo()" style="text-transform:uppercase"><option value="">— Selecione o cliente —</option></select></div>
+      <div class="hfield"><label>Obra / Projeto (Cliente)</label><select id="h-obra" onchange="onMudarClienteSelecionado()" onblur="revalidarNRDOSeNovo()" style="text-transform:uppercase"><option value="">Selecione...</option></select></div>
       <div class="hfield"><label>Disciplina</label><select id="h-disc" onchange="atualizarBannerObra()" style="text-transform:uppercase">
         <option value="">— Selecione —</option>
         <option value="MECÂNICA">MECÂNICA</option>
@@ -2152,7 +2154,7 @@ function onMudarEncarregadoSelecionado(){
 function popularSelectObra(nomes,valorParaManter){
   const sel=document.getElementById('h-obra');
   if(!sel) return;
-  sel.innerHTML='<option value="">— Selecione o cliente —</option>';
+  sel.innerHTML='<option value="">Selecione...</option>';
   nomes.forEach(n=>{
     const opt=document.createElement('option');
     opt.value=n; opt.textContent=n;
@@ -2352,7 +2354,7 @@ function renderizarVisaoGeralExecutivo(){
     </div>
     <div style="font-size:12px;font-weight:900;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Total geral de cada encarregado, separadamente</div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      ${resumo.map(r=>`
+      ${resumo.filter(r=>r.rdos>0).map(r=>`
         <div onclick="selecionarEncarregadoExecutivo('${r.nome.replace(/'/g,"\\'")}')" style="border:2px solid var(--border,#000);border-radius:10px;padding:12px 14px;cursor:pointer;background:var(--surface2)">
           <div style="font-size:14px;font-weight:900;margin-bottom:8px">👷 ${r.nome}</div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 14px;font-size:12px">
@@ -2364,7 +2366,7 @@ function renderizarVisaoGeralExecutivo(){
             <div><span style="color:#6830cc">Concluído:</span> <b style="color:#6830cc">${fmt(r.conc)}h</b></div>
           </div>
         </div>
-      `).join('')}
+      `).join('')||'<div style="font-size:11.5px;color:var(--text3);padding:8px">Ninguém enviou RDO ainda.</div>'}
     </div>
     <div style="font-size:10.5px;color:var(--text3);margin-top:12px">Toque em qualquer encarregado (na lista ao lado, ou no bloco acima) pra ver o histórico completo de RDOs, atividades, descrições e funcionários envolvidos.</div>
   `;
@@ -6185,38 +6187,65 @@ function renderizarExtraEscopo(){
     return totB-totA; // quem consumiu mais horas aparece primeiro
   });
 
-  wrap.innerHTML=listaProjetos.map(p=>{
+  wrap.innerHTML=listaProjetos.map((p,idxP)=>{
     const totalProjeto=p.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
     const chaveSegura=p.chave.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const diasHtml=p.dias.map(g=>{
-      const [y,m,dd]=g.data.split('-');
-      const totalDia=g.trabalhadores.reduce((s,t)=>s+t.horas,0);
-      const trabList=g.trabalhadores.map(t=>{
-        const nomeTrabSeguro=t.nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        return `<span style="display:inline-flex;align-items:center;gap:4px">${t.nome} (${t.funcao}) — <b>${fmt(t.horas)}h</b> <button onclick="deletarTrabalhadorExtraEscopo('${g.chave}','${nomeTrabSeguro}')" title="Remover só este funcionário" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;border-radius:3px;font-size:8px;padding:0 3px;cursor:pointer">✕</button></span>`;
-      }).join(', ');
-      return `<div class="ee-dia">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
-          <div>
-            <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="font-weight:800">🔧 ${g.disc}</span> — <span style="color:#158038;font-weight:900">${g.ose}</span> <span style="opacity:.7;font-weight:400">(${g.nrdo})</span><br>
-            <span style="color:var(--text2)">${g.descricao}</span><br>
-            ${trabList}
+
+    // Agrupa os dias desse projeto por Disciplina — mesma organização do Horas/Projeto,
+    // sem mexer em nenhum dos botões de apagar/compartilhar que já funcionam nos dias.
+    const porDisc={};
+    p.dias.forEach(g=>{
+      const nomeDisc=g.disc||'(SEM DISCIPLINA)';
+      if(!porDisc[nomeDisc]) porDisc[nomeDisc]={nome:nomeDisc,dias:[]};
+      porDisc[nomeDisc].dias.push(g);
+    });
+    const disciplinas=Object.values(porDisc).sort((a,b)=>{
+      const totA=a.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
+      const totB=b.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
+      return totB-totA;
+    });
+
+    const disciplinasHtml=disciplinas.map((disc,idxD)=>{
+      const totalDisc=disc.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
+      const idExpandDisc=`ee-disc-${idxP}-${idxD}`;
+      const diasHtml=disc.dias.map(g=>{
+        const [y,m,dd]=g.data.split('-');
+        const totalDia=g.trabalhadores.reduce((s,t)=>s+t.horas,0);
+        const trabList=g.trabalhadores.map(t=>{
+          const nomeTrabSeguro=t.nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+          return `<span style="display:inline-flex;align-items:center;gap:4px">${t.nome} (${t.funcao}) — <b>${fmt(t.horas)}h</b> <button onclick="deletarTrabalhadorExtraEscopo('${g.chave}','${nomeTrabSeguro}')" title="Remover só este funcionário" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;border-radius:3px;font-size:8px;padding:0 3px;cursor:pointer">✕</button></span>`;
+        }).join(', ');
+        return `<div class="ee-dia">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+            <div>
+              <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="color:#158038;font-weight:900">${g.ose}</span> <span style="opacity:.7;font-weight:400">(${g.nrdo})</span><br>
+              <span style="color:var(--text2)">${g.descricao}</span><br>
+              ${trabList}
+            </div>
+            <div style="text-align:right;white-space:nowrap">
+              <div style="font-weight:900;color:#158038;margin-bottom:3px">${fmt(totalDia)}h</div>
+              <button onclick="compartilharExtraEscopoIndividual('${g.chave}')" title="PDF só deste dia" style="background:#0a6080;color:#fff;border:none;padding:2px 5px;font-size:10px;cursor:pointer;margin-bottom:2px">📤</button>
+              <button onclick="deletarExtraEscopoIndividual('${g.chave}')" title="Remover só este dia" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;padding:2px 5px;font-size:10px;cursor:pointer">🗑️</button>
+            </div>
           </div>
-          <div style="text-align:right;white-space:nowrap">
-            <div style="font-weight:900;color:#158038;margin-bottom:3px">${fmt(totalDia)}h</div>
-            <button onclick="compartilharExtraEscopoIndividual('${g.chave}')" title="PDF só deste dia" style="background:#0a6080;color:#fff;border:none;padding:2px 5px;font-size:10px;cursor:pointer;margin-bottom:2px">📤</button>
-            <button onclick="deletarExtraEscopoIndividual('${g.chave}')" title="Remover só este dia" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;padding:2px 5px;font-size:10px;cursor:pointer">🗑️</button>
-          </div>
+        </div>`;
+      }).join('');
+      return `<div style="margin-top:6px;border:1px solid var(--border,#e5e5e5);border-radius:8px;overflow:hidden">
+        <div onclick="event.stopPropagation();const e=document.getElementById('${idExpandDisc}');e.style.display=e.style.display==='none'?'block':'none'" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;cursor:pointer;background:var(--surface2)">
+          <div style="font-size:12px;font-weight:800">🔧 ${disc.nome}</div>
+          <div style="font-size:12px;font-weight:900">${fmt(totalDisc)}h</div>
         </div>
+        <div id="${idExpandDisc}" style="display:none;padding:6px 10px 10px">${diasHtml}</div>
       </div>`;
     }).join('');
+
     return `<div class="ee-projeto">
       <div class="ee-projeto-header" onclick="toggleExtraEscopoProjeto(this)">
-        <b>🟢 ${p.nome} <span style="font-weight:400;font-size:10px;opacity:.85">(${p.dias.length} dia${p.dias.length>1?'s':''} · toque pra ver detalhes)</span></b>
+        <b>🟢 ${p.nome} <span style="font-weight:400;font-size:10px;opacity:.85">(${disciplinas.length} disciplina(s) · ${p.dias.length} dia${p.dias.length>1?'s':''} · toque pra ver detalhes)</span></b>
         <span class="tot">${fmt(totalProjeto)}h</span>
       </div>
       <div class="ee-projeto-dias">
-        ${diasHtml}
+        ${disciplinasHtml}
         <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px">
           <button onclick="compartilharExtraEscopoProjeto('${chaveSegura}')" style="background:#0a6080;color:#fff;border:none;padding:4px 10px;font-size:10px;font-weight:900;cursor:pointer">📤 PDF deste Extra Escopo</button>
         </div>
@@ -6640,38 +6669,65 @@ function renderizarAndamento(){
     return totB-totA; // projeto com mais horas aparece primeiro
   });
 
-  wrap.innerHTML=listaProjetos.map(p=>{
+  wrap.innerHTML=listaProjetos.map((p,idxP)=>{
     const totalProjeto=p.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
     const chaveSegura=p.chave.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const diasHtml=p.dias.map(g=>{
-      const [y,m,dd]=g.data.split('-');
-      const totalDia=g.trabalhadores.reduce((s,t)=>s+t.horas,0);
-      const trabList=g.trabalhadores.map(t=>{
-        const nomeTrabSeguro=t.nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        return `<span style="display:inline-flex;align-items:center;gap:4px">${t.nome} (${t.funcao}) — <b>${fmt(t.horas)}h</b> <button onclick="deletarAndamentoTrabalhador('${g.chave}','${nomeTrabSeguro}')" title="Remover só este funcionário" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;border-radius:3px;font-size:8px;padding:0 3px;cursor:pointer">✕</button></span>`;
-      }).join(', ');
-      return `<div class="an-dia">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
-          <div>
-            <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="font-weight:800">🔧 ${g.disc}</span> — <span style="color:#1a52c8;font-weight:900">${g.ose}</span> <span style="opacity:.7;font-weight:400">(${g.nrdo})</span><br>
-            <span style="color:var(--text2)">${g.descricao}</span><br>
-            ${trabList}
+
+    // Agrupa os dias desse projeto por Disciplina — mesma organização do Horas/Projeto,
+    // sem mexer em nenhum dos botões de apagar/compartilhar que já funcionam nos dias.
+    const porDisc={};
+    p.dias.forEach(g=>{
+      const nomeDisc=g.disc||'(SEM DISCIPLINA)';
+      if(!porDisc[nomeDisc]) porDisc[nomeDisc]={nome:nomeDisc,dias:[]};
+      porDisc[nomeDisc].dias.push(g);
+    });
+    const disciplinas=Object.values(porDisc).sort((a,b)=>{
+      const totA=a.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
+      const totB=b.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
+      return totB-totA;
+    });
+
+    const disciplinasHtml=disciplinas.map((disc,idxD)=>{
+      const totalDisc=disc.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
+      const idExpandDisc=`an-disc-${idxP}-${idxD}`;
+      const diasHtml=disc.dias.map(g=>{
+        const [y,m,dd]=g.data.split('-');
+        const totalDia=g.trabalhadores.reduce((s,t)=>s+t.horas,0);
+        const trabList=g.trabalhadores.map(t=>{
+          const nomeTrabSeguro=t.nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+          return `<span style="display:inline-flex;align-items:center;gap:4px">${t.nome} (${t.funcao}) — <b>${fmt(t.horas)}h</b> <button onclick="deletarAndamentoTrabalhador('${g.chave}','${nomeTrabSeguro}')" title="Remover só este funcionário" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;border-radius:3px;font-size:8px;padding:0 3px;cursor:pointer">✕</button></span>`;
+        }).join(', ');
+        return `<div class="an-dia">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+            <div>
+              <b>${dd}/${m}/${y}</b> — <span style="font-weight:800">🏭 ${g.obra}</span> — <span style="font-weight:800">👷 ${g.encarregado}</span> — <span style="color:#1a52c8;font-weight:900">${g.ose}</span> <span style="opacity:.7;font-weight:400">(${g.nrdo})</span><br>
+              <span style="color:var(--text2)">${g.descricao}</span><br>
+              ${trabList}
+            </div>
+            <div style="text-align:right;white-space:nowrap">
+              <div style="font-weight:900;color:#1a52c8;margin-bottom:3px">${fmt(totalDia)}h</div>
+              <button onclick="compartilharAndamentoDia('${g.chave}')" title="PDF só deste dia" style="background:#0a6080;color:#fff;border:none;padding:2px 5px;font-size:10px;cursor:pointer;margin-bottom:2px">📤</button>
+              <button onclick="deletarAndamentoDia('${g.chave}')" title="Remover só este dia" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;padding:2px 5px;font-size:10px;cursor:pointer">🗑️</button>
+            </div>
           </div>
-          <div style="text-align:right;white-space:nowrap">
-            <div style="font-weight:900;color:#1a52c8;margin-bottom:3px">${fmt(totalDia)}h</div>
-            <button onclick="compartilharAndamentoDia('${g.chave}')" title="PDF só deste dia" style="background:#0a6080;color:#fff;border:none;padding:2px 5px;font-size:10px;cursor:pointer;margin-bottom:2px">📤</button>
-            <button onclick="deletarAndamentoDia('${g.chave}')" title="Remover só este dia" style="background:#fee2e2;color:#dc2626;border:1px solid #dc2626;padding:2px 5px;font-size:10px;cursor:pointer">🗑️</button>
-          </div>
+        </div>`;
+      }).join('');
+      return `<div style="margin-top:6px;border:1px solid var(--border,#e5e5e5);border-radius:8px;overflow:hidden">
+        <div onclick="event.stopPropagation();const e=document.getElementById('${idExpandDisc}');e.style.display=e.style.display==='none'?'block':'none'" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;cursor:pointer;background:var(--surface2)">
+          <div style="font-size:12px;font-weight:800">🔧 ${disc.nome}</div>
+          <div style="font-size:12px;font-weight:900">${fmt(totalDisc)}h</div>
         </div>
+        <div id="${idExpandDisc}" style="display:none;padding:6px 10px 10px">${diasHtml}</div>
       </div>`;
     }).join('');
+
     return `<div class="an-projeto">
       <div class="an-projeto-header" onclick="toggleAndamentoProjeto(this)">
-        <b>📁 ${p.nome} <span style="font-weight:400;font-size:10px;opacity:.85">(${p.dias.length} dia${p.dias.length>1?'s':''} · toque pra ver detalhes)</span></b>
+        <b>📁 ${p.nome} <span style="font-weight:400;font-size:10px;opacity:.85">(${disciplinas.length} disciplina(s) · ${p.dias.length} dia${p.dias.length>1?'s':''} · toque pra ver detalhes)</span></b>
         <span class="tot">${fmt(totalProjeto)}h</span>
       </div>
       <div class="an-projeto-dias">
-        ${diasHtml}
+        ${disciplinasHtml}
         <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px">
           <button onclick="compartilharAndamentoProjeto('${chaveSegura}')" style="background:#0a6080;color:#fff;border:none;padding:4px 10px;font-size:10px;font-weight:900;cursor:pointer">📤 PDF deste projeto</button>
         </div>
