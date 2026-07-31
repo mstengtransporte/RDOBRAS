@@ -2324,6 +2324,7 @@ async function abrirPainelExecutivo(){
         <button onclick="renderizarVisaoGeralExecutivo()" id="exec-btn-geral" class="exec-sidebar-btn" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:#9d174d;color:#fff;border-radius:8px;font-size:12px;font-weight:900;cursor:pointer;margin-bottom:6px">📊 Visão Geral</button>
         <div id="exec-lista-encarregados"></div>
         <button onclick="document.getElementById('exec-modal').remove()" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:transparent;color:var(--text3);border-radius:8px;font-size:11px;cursor:pointer;margin-top:14px">✕ Fechar</button>
+        <button onclick="forcarAtualizacaoPainel('executivo')" style="display:block;width:100%;text-align:center;padding:9px 8px;border:2px solid #0d5228;background:#158038;color:#fff;border-radius:8px;font-size:10.5px;font-weight:900;cursor:pointer;margin-top:8px;text-transform:uppercase">🔄 Atualizar agora</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -6258,6 +6259,7 @@ async function forcarAtualizacaoPainel(painel){
   if(painel==='extraescopo') renderizarExtraEscopo();
   else if(painel==='andamento') renderizarAndamento();
   else if(painel==='projetos') renderizarProjetos();
+  else if(painel==='executivo') renderizarVisaoGeralExecutivo();
   showToast('✓ Atualizado com os dados mais recentes da nuvem.','#16a34a');
 }
 
