@@ -69,10 +69,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(0,0,0,.04) 39px,rgba(0,0,0,.04) 40px);
   background-size:40px 40px}
 
-/* ── FORÇA TEXTO BRANCO NOS CAMPOS ── */
-input:not(.hrs),select:not(.hrs-status){font-weight:900!important}
-body:not(.dark) input:not(.hrs),body:not(.dark) select.cell-name,body:not(.dark) select.cell-func{color:#0a1628!important}
-body.dark input:not(.hrs),body.dark select.cell-name,body.dark select.cell-func,body.dark .sum-val{color:#fff!important}
+/* ── FORÇA TEXTO ESCURO E EM NEGRITO EM TODOS OS CAMPOS DE PREENCHIMENTO ── */
+input:not(.hrs),textarea:not(.hrs),select:not(.hrs-status):not(.ose-status-sel){font-weight:900!important}
+body:not(.dark) input:not(.hrs),body:not(.dark) textarea:not(.hrs),body:not(.dark) select:not(.hrs-status):not(.ose-status-sel){color:#0a1628!important}
+body.dark input:not(.hrs),body.dark textarea:not(.hrs),body.dark select:not(.hrs-status):not(.ose-status-sel),body.dark .sum-val{color:#fff!important}
 textarea.hrs{color:inherit}
 textarea.hrs.col-sem{color:#0a1628}
 body.dark textarea.hrs.col-sem{color:#fff}
@@ -635,11 +635,13 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
 .list-box{max-height:90vh;display:flex;flex-direction:column}
 .list-box-body{overflow-y:auto;flex:1}
 .list-input-row{display:flex;gap:8px;margin-bottom:12px}
-.list-input-row input{flex:1;padding:8px 10px;border:2px solid #000;background:var(--surface2);color:var(--text);font-size:13px;font-weight:700;outline:none}
+.list-input-row input{flex:1;padding:8px 10px;border:2px solid #000;background:#dbe2ee;color:#0a1628;font-size:13px;font-weight:900;outline:none}
+body.dark .list-input-row input{background:#2a3a58;color:#fff;border-color:#5a7ac0}
 .list-input-row input:focus{border-color:var(--accent)}
 .list-input-row button{padding:8px 14px;background:var(--accent);color:#fff;border:2px solid #000;cursor:pointer;font-size:12px;font-weight:900;white-space:nowrap}
 .list-items{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto}
-.list-item{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;background:var(--surface2);border:1.5px solid var(--border2);font-size:13px;font-weight:700;color:var(--text)}
+.list-item{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;background:#dbe2ee;border:1.5px solid #7a8aa8;font-size:13px;font-weight:900;color:#0a1628}
+body.dark .list-item{background:#1c2a44;border-color:#3a5a90;color:#fff}
 .list-item-del{background:none;border:none;cursor:pointer;color:#cc2020;font-size:15px;padding:2px 6px;opacity:.5;transition:opacity .12s}
 .list-item-del:hover{opacity:1;background:#fee2e2}
 .list-box-footer{padding:12px 16px;border-top:2px solid #000;display:flex;gap:8px;justify-content:flex-end}
@@ -2290,6 +2292,7 @@ function coletarResumoPorEncarregado(){
 async function abrirPainelExecutivo(){
   if(!exigirAdmin()) return;
   await sincronizarSeAdmin();
+  await carregarEncarregados();
   autoSilentSave();
   document.getElementById('exec-modal')?.remove();
   const ov=document.createElement('div');
@@ -2310,7 +2313,18 @@ async function abrirPainelExecutivo(){
 }
 
 function renderizarVisaoGeralExecutivo(){
-  const resumo=coletarResumoPorEncarregado().sort((a,b)=>b.total-a.total);
+  const resumo=coletarResumoPorEncarregado();
+  // Garante que TODO encarregado cadastrado (com login liberado) apareça na lista, mesmo
+  // que ainda não tenha feito nenhum RDO — assim o admin já vê o "espaço" reservado dele
+  // desde já, e assim que a pessoa salvar e enviar o primeiro RDO, os campos preenchem
+  // sozinhos ali (é automático, ligado pelo login dela, nada manual).
+  encarregadosCache.forEach(e=>{
+    const nomeUpper=(e.nome||'').toUpperCase();
+    if(nomeUpper&&!resumo.some(r=>r.nome===nomeUpper)){
+      resumo.push({nome:nomeUpper,rdos:0,obras:0,and:0,ext:0,conc:0,par:0,total:0,ultimaData:null,rdosDetalhe:[]});
+    }
+  });
+  resumo.sort((a,b)=>b.total-a.total);
 
   // Marca o botão "Visão Geral" como ativo na barra lateral
   document.querySelectorAll('.exec-sidebar-btn').forEach(b=>b.style.background='transparent');
@@ -2318,8 +2332,8 @@ function renderizarVisaoGeralExecutivo(){
   if(btnGeral) btnGeral.style.background='#9d174d';
 
   document.getElementById('exec-lista-encarregados').innerHTML=resumo.map(r=>`
-    <button onclick="selecionarEncarregadoExecutivo('${r.nome.replace(/'/g,"\\'")}')" class="exec-sidebar-btn" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:transparent;color:var(--text);border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;margin-bottom:4px">👷 ${r.nome}<br><span style="font-weight:400;font-size:10px;opacity:.7">${fmt(r.total)}h · ${r.rdos} RDO(s)</span></button>
-  `).join('')||'<div style="font-size:11px;color:var(--text3);padding:6px">Nenhum RDO encontrado ainda.</div>';
+    <button onclick="selecionarEncarregadoExecutivo('${r.nome.replace(/'/g,"\\'")}')" class="exec-sidebar-btn" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:transparent;color:var(--text);border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;margin-bottom:4px${r.rdos===0?';opacity:.55':''}">👷 ${r.nome}<br><span style="font-weight:400;font-size:10px;opacity:.7">${r.rdos===0?'Ainda sem RDOs':`${fmt(r.total)}h · ${r.rdos} RDO(s)`}</span></button>
+  `).join('')||'<div style="font-size:11px;color:var(--text3);padding:6px">Nenhum encarregado cadastrado ainda.</div>';
 
   const totalGeral=resumo.reduce((s,r)=>s+r.total,0);
   const totalAnd=resumo.reduce((s,r)=>s+r.and,0);
@@ -2754,7 +2768,7 @@ function normalizarObra(texto){
   return (texto||'')
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos (á→a, ç→c, ã→a...)
     .toUpperCase()
-    .replace(/[.,;:!?'"()]/g,'')                      // remove pontuação comum
+    .replace(/[.,;:!?'"()\-_]/g,' ')                   // troca pontuação comum por espaço (parênteses, hífen, etc)
     .replace(/\s+/g,' ')                               // colapsa espaços duplicados
     .trim();
 }
@@ -6069,6 +6083,8 @@ function coletarDadosExtraEscopo(dataInicio,dataFim){
             data:h.data,
             dataFmt:formatarDataBR(h.data),
             obra:h.obra||'—',
+            disc:(h.disc||'(SEM DISCIPLINA)').toUpperCase(),
+            nrdo:h.nrdo||'—',
             encarregado:(h.enc||'—').toUpperCase(),
             ose:`OSE ${String(idx+1).padStart(2,'0')}`,
             servico:(o.name||'—').toUpperCase(),
@@ -6150,12 +6166,14 @@ function renderizarExtraEscopo(){
   });
   extraEscopoGruposAtuais=grupos; // pros botões de deletar/compartilhar por dia e por funcionário
 
-  // 2º agrupa esses dias por NOME DO PROJETO/OSE — pra saber, individualmente, quanto
-  // cada Extra Escopo consumiu no total e em quantos dias (1, 2, 3, 10... o que for)
+  // 2º agrupa esses dias por NOME DO PROJETO/OSE (comparação tolerante — ignora acento,
+  // pontuação, maiúscula/minúscula — mesmo tratamento já usado no Horas/Projeto) — pra
+  // saber, individualmente, quanto cada Extra Escopo consumiu no total e em quantos dias
   const projetos={};
   Object.values(grupos).forEach(g=>{
-    const chaveProjeto=g.servico!=='—'?g.servico:`(SEM NOME) ${g.ose}`;
-    if(!projetos[chaveProjeto]) projetos[chaveProjeto]={nome:chaveProjeto,dias:[]};
+    const chaveOriginal=g.servico!=='—'?g.servico:`(SEM NOME) ${g.ose}`;
+    const chaveProjeto=normalizarObra(chaveOriginal);
+    if(!projetos[chaveProjeto]) projetos[chaveProjeto]={nome:chaveOriginal,chave:chaveProjeto,dias:[]};
     projetos[chaveProjeto].dias.push(g);
   });
   Object.values(projetos).forEach(p=>p.dias.sort((a,b)=>a.data.localeCompare(b.data)));
@@ -6169,7 +6187,7 @@ function renderizarExtraEscopo(){
 
   wrap.innerHTML=listaProjetos.map(p=>{
     const totalProjeto=p.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
-    const nomeSeguro=p.nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const chaveSegura=p.chave.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     const diasHtml=p.dias.map(g=>{
       const [y,m,dd]=g.data.split('-');
       const totalDia=g.trabalhadores.reduce((s,t)=>s+t.horas,0);
@@ -6200,7 +6218,7 @@ function renderizarExtraEscopo(){
       <div class="ee-projeto-dias">
         ${diasHtml}
         <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px">
-          <button onclick="compartilharExtraEscopoProjeto('${nomeSeguro}')" style="background:#0a6080;color:#fff;border:none;padding:4px 10px;font-size:10px;font-weight:900;cursor:pointer">📤 PDF deste Extra Escopo</button>
+          <button onclick="compartilharExtraEscopoProjeto('${chaveSegura}')" style="background:#0a6080;color:#fff;border:none;padding:4px 10px;font-size:10px;font-weight:900;cursor:pointer">📤 PDF deste Extra Escopo</button>
         </div>
       </div>
     </div>`;
@@ -6603,11 +6621,13 @@ function renderizarAndamento(){
   });
   andamentoGruposAtuais=dias;
 
-  // 2º agrupa esses dias por NOME DO PROJETO — essa é a visão principal aqui
+  // 2º agrupa esses dias por NOME DO PROJETO (comparação tolerante — ignora acento,
+  // pontuação, maiúscula/minúscula — mesmo tratamento do Horas/Projeto e Extra Escopo)
   const projetos={};
   Object.values(dias).forEach(g=>{
-    if(!projetos[g.servico]) projetos[g.servico]={nome:g.servico,dias:[]};
-    projetos[g.servico].dias.push(g);
+    const chaveProjeto=normalizarObra(g.servico);
+    if(!projetos[chaveProjeto]) projetos[chaveProjeto]={nome:g.servico,chave:chaveProjeto,dias:[]};
+    projetos[chaveProjeto].dias.push(g);
   });
   Object.values(projetos).forEach(p=>p.dias.sort((a,b)=>a.data.localeCompare(b.data)));
   andamentoProjetosAtuais=projetos;
@@ -6620,7 +6640,7 @@ function renderizarAndamento(){
 
   wrap.innerHTML=listaProjetos.map(p=>{
     const totalProjeto=p.dias.reduce((s,g)=>s+g.trabalhadores.reduce((s2,t)=>s2+t.horas,0),0);
-    const nomeSeguro=p.nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const chaveSegura=p.chave.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     const diasHtml=p.dias.map(g=>{
       const [y,m,dd]=g.data.split('-');
       const totalDia=g.trabalhadores.reduce((s,t)=>s+t.horas,0);
@@ -6651,7 +6671,7 @@ function renderizarAndamento(){
       <div class="an-projeto-dias">
         ${diasHtml}
         <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px">
-          <button onclick="compartilharAndamentoProjeto('${nomeSeguro}')" style="background:#0a6080;color:#fff;border:none;padding:4px 10px;font-size:10px;font-weight:900;cursor:pointer">📤 PDF deste projeto</button>
+          <button onclick="compartilharAndamentoProjeto('${chaveSegura}')" style="background:#0a6080;color:#fff;border:none;padding:4px 10px;font-size:10px;font-weight:900;cursor:pointer">📤 PDF deste projeto</button>
         </div>
       </div>
     </div>`;
