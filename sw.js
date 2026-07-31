@@ -3,12 +3,13 @@
 // bibliotecas pesadas (PDF/Excel/Supabase) e os ícones, que quase nunca mudam, continuam
 // abrindo instantâneo da cópia salva. Nos dois casos, sem internet, cai pro que já foi
 // salvo antes — o app continua abrindo offline.
-const CACHE_NAME='rdo-master-energy-v3';
+const CACHE_NAME='rdo-master-energy-v4';
 const ARQUIVOS_ESTATICOS=[
   './manifest.json','./icon-192.png','./icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js'
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'
 ];
 const ARQUIVOS=['./index.html',...ARQUIVOS_ESTATICOS];
 
