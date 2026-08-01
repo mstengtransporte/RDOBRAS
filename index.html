@@ -5347,7 +5347,7 @@ async function exportarXLSX(){
     linha.font={bold:true,color:{argb:corFonte[status]},size:10};
     linha.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFill[status]}};
     linha.alignment={horizontal:'left',vertical:'middle',indent:1};
-    for(let c=1;c<=NCOL;c++) ws1.getCell(L,c).border={top:{style:'medium',color:{argb:'FF000000'}},left:{style:'medium',color:{argb:'FF000000'}},right:{style:'medium',color:{argb:'FF000000'}}};
+    for(let c=1;c<=NCOL;c++) ws1.getCell(L,c).border={top:{style:'medium',color:{argb:'FF000000'}},bottom:{style:'thin',color:{argb:'FF888888'}},left:{style:'medium',color:{argb:'FF000000'}},right:{style:'medium',color:{argb:'FF000000'}}};
     L++;
     ws1.mergeCells(L,1,L,NCOL);
     const descCell=ws1.getCell(L,1);
@@ -5360,11 +5360,11 @@ async function exportarXLSX(){
     const caracteresPorLinha=95; // estimativa pra uma célula mesclada larga (10 colunas)
     const linhasEstimadas=Math.max(1,Math.ceil(descTexto.length/caracteresPorLinha));
     ws1.getRow(L).height=Math.max(18,linhasEstimadas*14);
-    for(let c=1;c<=NCOL;c++) ws1.getCell(L,c).border={bottom:{style:'medium',color:{argb:'FF000000'}},left:{style:'medium',color:{argb:'FF000000'}},right:{style:'medium',color:{argb:'FF000000'}}};
+    for(let c=1;c<=NCOL;c++) ws1.getCell(L,c).border={top:{style:'thin',color:{argb:'FF888888'}},bottom:{style:'medium',color:{argb:'FF000000'}},left:{style:'medium',color:{argb:'FF000000'}},right:{style:'medium',color:{argb:'FF000000'}}};
     L+=2;
   });
 
-  ws1.getColumn(1).width=4; ws1.getColumn(2).width=26; ws1.getColumn(3).width=18;
+  ws1.getColumn(1).width=15; ws1.getColumn(2).width=26; ws1.getColumn(3).width=18;
   for(let c=4;c<=9;c++) ws1.getColumn(c).width=9;
   ws1.getColumn(10).width=14;
 
