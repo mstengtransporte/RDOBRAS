@@ -7251,7 +7251,7 @@ async function exportarBackupCompletoExcel(btn){
     const encarregadosUnicos=new Set(registros.map(r=>r.encarregado)).size;
 
     // ── Agregações usadas nas tabelas de resumo ──
-    const porObra={},porEnc={},porDisc={};
+    const porObra={},porEnc={},porDisc={},porEncObraDisc={};
     const obraEncMatriz={},obraDiscMatriz={};
     const nomesEncarregados=new Set();
     const nomesDisciplinasPorChave={}; // chave normalizada → nome de exibição (primeira ocorrência)
@@ -7278,6 +7278,13 @@ async function exportarBackupCompletoExcel(btn){
 
       if(!obraDiscMatriz[chaveObra]) obraDiscMatriz[chaveObra]={nomeObra:r.obra};
       obraDiscMatriz[chaveObra][chaveDisc]=(obraDiscMatriz[chaveObra][chaveDisc]||0)+r.horas;
+
+      // Agrupamento combinado: cada Encarregado, o que ele fez em cada Obra, em cada
+      // Disciplina — pra entender de cara "fulano trabalhou em tal obra, na disciplina
+      // tal, totalizando tantas horas", tudo numa linha só.
+      const chaveCombo=r.encarregado+'|'+chaveObra+'|'+chaveDisc;
+      if(!porEncObraDisc[chaveCombo]) porEncObraDisc[chaveCombo]={encarregado:r.encarregado,obra:r.obra,disc:nomeDiscCanonico,horas:0,rdos:new Set()};
+      porEncObraDisc[chaveCombo].horas+=r.horas; porEncObraDisc[chaveCombo].rdos.add(r.nrdo+'|'+r.data);
     });
     const listaEncarregados=[...nomesEncarregados].sort();
     const listaDisciplinasChaves=Object.keys(nomesDisciplinasPorChave).sort();
@@ -7348,13 +7355,13 @@ async function exportarBackupCompletoExcel(btn){
       L+=2;
     }
 
-    desenharTabela('🏭 RESUMO POR OBRA','FFC2410C',['Obra/Cliente','Total de Horas','Qtd. de RDOs'],
-      Object.values(porObra).sort((a,b)=>b.horas-a.horas).map(o=>[o.nome,Number(o.horas.toFixed(1)),o.rdos.size]));
+    desenharTabela('👷 RESUMO POR ENCARREGADO × OBRA × DISCIPLINA','FF9D174D',['Encarregado','Obra/Cliente','Disciplina','Total de Horas','Qtd. de RDOs'],
+      Object.values(porEncObraDisc).sort((a,b)=>{
+        if(a.encarregado!==b.encarregado) return a.encarregado.localeCompare(b.encarregado);
+        return b.horas-a.horas;
+      }).map(info=>[info.encarregado,info.obra,info.disc,Number(info.horas.toFixed(1)),info.rdos.size]));
 
-    desenharTabela('👷 RESUMO POR ENCARREGADO','FF9D174D',['Encarregado','Total de Horas','Qtd. de RDOs','Obras Diferentes'],
-      Object.entries(porEnc).sort((a,b)=>b[1].horas-a[1].horas).map(([nome,info])=>[nome,Number(info.horas.toFixed(1)),info.rdos.size,info.obras.size]));
-
-    desenharTabela('🔧 RESUMO POR DISCIPLINA','FF6030BB',['Disciplina','Total de Horas','Qtd. de RDOs'],
+    desenharTabela('🔧 RESUMO POR DISCIPLINA — TODOS OS ENCARREGADOS','FF6030BB',['Disciplina','Total de Horas','Qtd. de RDOs'],
       Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,Number(info.horas.toFixed(1)),info.rdos.size]));
 
     desenharTabela('📊 HORAS POR OBRA × ENCARREGADO','FF158038',['Obra',...listaEncarregados],
