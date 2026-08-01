@@ -7250,28 +7250,23 @@ async function exportarBackupCompletoExcel(btn){
     const obrasUnicas=new Set(registros.map(r=>normalizarObra(r.obra))).size;
     const encarregadosUnicos=new Set(registros.map(r=>r.encarregado)).size;
 
-    // ── Agregações usadas nas tabelas de resumo ──
-    const porObra={},porEnc={},porDisc={},porEncObraDisc={};
+    // ── Agregações base ──
+    const porDisc={};
     const obraEncMatriz={},obraDiscMatriz={};
     const nomesEncarregados=new Set();
-    const nomesDisciplinasPorChave={}; // chave normalizada → nome de exibição (primeira ocorrência)
+    const nomesDisciplinasPorChave={};
+    const porEncObraDisc={};
     registros.forEach(r=>{
       const chaveObra=normalizarObra(r.obra);
-      if(!porObra[chaveObra]) porObra[chaveObra]={nome:r.obra,horas:0,rdos:new Set()};
-      porObra[chaveObra].horas+=r.horas; porObra[chaveObra].rdos.add(r.nrdo+'|'+r.data);
-
-      if(!porEnc[r.encarregado]) porEnc[r.encarregado]={horas:0,rdos:new Set(),obras:new Set()};
-      porEnc[r.encarregado].horas+=r.horas; porEnc[r.encarregado].rdos.add(r.nrdo+'|'+r.data); porEnc[r.encarregado].obras.add(chaveObra);
       nomesEncarregados.add(r.encarregado);
 
-      // Disciplina também precisa de comparação tolerante — sem isso, "Mecânica" (RDO
-      // antigo, digitado livre) e "MECÂNICA" (cadastro novo, lista fixa) contavam como
-      // duas disciplinas diferentes, duplicando o resumo.
       const chaveDisc=normalizarObra(r.disc);
       if(!nomesDisciplinasPorChave[chaveDisc]) nomesDisciplinasPorChave[chaveDisc]=r.disc;
       const nomeDiscCanonico=nomesDisciplinasPorChave[chaveDisc];
-      if(!porDisc[chaveDisc]) porDisc[chaveDisc]={nome:nomeDiscCanonico,horas:0,rdos:new Set()};
+      if(!porDisc[chaveDisc]) porDisc[chaveDisc]={nome:nomeDiscCanonico,horas:0,rdos:new Set(),primeiraData:r.data,ultimaData:r.data};
       porDisc[chaveDisc].horas+=r.horas; porDisc[chaveDisc].rdos.add(r.nrdo+'|'+r.data);
+      if(r.data<porDisc[chaveDisc].primeiraData) porDisc[chaveDisc].primeiraData=r.data;
+      if(r.data>porDisc[chaveDisc].ultimaData) porDisc[chaveDisc].ultimaData=r.data;
 
       if(!obraEncMatriz[chaveObra]) obraEncMatriz[chaveObra]={nomeObra:r.obra};
       obraEncMatriz[chaveObra][r.encarregado]=(obraEncMatriz[chaveObra][r.encarregado]||0)+r.horas;
@@ -7279,18 +7274,21 @@ async function exportarBackupCompletoExcel(btn){
       if(!obraDiscMatriz[chaveObra]) obraDiscMatriz[chaveObra]={nomeObra:r.obra};
       obraDiscMatriz[chaveObra][chaveDisc]=(obraDiscMatriz[chaveObra][chaveDisc]||0)+r.horas;
 
-      // Agrupamento combinado: cada Encarregado, o que ele fez em cada Obra, em cada
-      // Disciplina — pra entender de cara "fulano trabalhou em tal obra, na disciplina
-      // tal, totalizando tantas horas", tudo numa linha só.
-      const chaveCombo=r.encarregado+'|'+chaveObra+'|'+chaveDisc;
-      if(!porEncObraDisc[chaveCombo]) porEncObraDisc[chaveCombo]={encarregado:r.encarregado,obra:r.obra,disc:nomeDiscCanonico,horas:0,rdos:new Set()};
-      porEncObraDisc[chaveCombo].horas+=r.horas; porEncObraDisc[chaveCombo].rdos.add(r.nrdo+'|'+r.data);
+      // Agrupamento combinado (usado nas 3 tabelas de resumo: geral, Andamento, Extra
+      // Escopo) — cada linha vira Encarregado + Obra + Disciplina + Status, com o
+      // período (primeira/última data) que aquilo cobre.
+      const chaveCombo=r.encarregado+'|'+chaveObra+'|'+chaveDisc+'|'+r.status;
+      if(!porEncObraDisc[chaveCombo]) porEncObraDisc[chaveCombo]={encarregado:r.encarregado,obra:r.obra,disc:nomeDiscCanonico,status:r.status,horas:0,rdos:new Set(),primeiraData:r.data,ultimaData:r.data};
+      const combo=porEncObraDisc[chaveCombo];
+      combo.horas+=r.horas; combo.rdos.add(r.nrdo+'|'+r.data);
+      if(r.data<combo.primeiraData) combo.primeiraData=r.data;
+      if(r.data>combo.ultimaData) combo.ultimaData=r.data;
     });
     const listaEncarregados=[...nomesEncarregados].sort();
     const listaDisciplinasChaves=Object.keys(nomesDisciplinasPorChave).sort();
-    const listaDisciplinas=listaDisciplinasChaves.map(ch=>nomesDisciplinasPorChave[ch]); // nomes bonitos, na mesma ordem das chaves
+    const listaDisciplinas=listaDisciplinasChaves.map(ch=>nomesDisciplinasPorChave[ch]);
 
-    const NUM_COLS_DETALHE=12;
+    const NUM_COLS_DETALHE=9;
     const largura=Math.max(NUM_COLS_DETALHE,listaEncarregados.length+2,listaDisciplinas.length+2);
     const ws=wb.addWorksheet('RDO Master Energy',{properties:{tabColor:{argb:'FF1457C8'}}});
 
@@ -7325,7 +7323,7 @@ async function exportarBackupCompletoExcel(btn){
     });
     L+=1;
 
-    function desenharTabela(titulo,corTitulo,colunas,linhas){
+    function desenharTabela(titulo,corTitulo,colunas,linhas,largurasColunas){
       ws.mergeCells(L,1,L,colunas.length);
       const tCell=ws.getCell(L,1);
       tCell.value=titulo;
@@ -7338,8 +7336,9 @@ async function exportarBackupCompletoExcel(btn){
         const c=ws.getCell(L,ci+1);
         c.value=col; c.font={bold:true,size:10};
         c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE2E8F0'}};
-        c.alignment={horizontal:'center'};
+        c.alignment={horizontal:'center',vertical:'middle',wrapText:true};
         c.border={bottom:{style:'thin',color:{argb:'FF999999'}}};
+        if(largurasColunas&&largurasColunas[ci]) ws.getColumn(ci+1).width=Math.max(ws.getColumn(ci+1).width||0,largurasColunas[ci]);
       });
       L++;
       linhas.forEach((linha,li)=>{
@@ -7347,22 +7346,34 @@ async function exportarBackupCompletoExcel(btn){
           const c=ws.getCell(L,ci+1);
           c.value=val;
           c.fill={type:'pattern',pattern:'solid',fgColor:{argb:li%2===0?'FFFFFFFF':'FFF5F7FA'}};
+          c.border={bottom:{style:'thin',color:{argb:'FFEEEEEE'}}};
           if(typeof val==='number'){ c.numFmt='0.0'; c.alignment={horizontal:'center'}; c.font={bold:true,size:10}; }
-          else c.font={size:10};
+          else{ c.font={size:10}; c.alignment={horizontal:'center',vertical:'middle'}; }
         });
         L++;
       });
       L+=2;
     }
 
-    desenharTabela('👷 RESUMO POR ENCARREGADO × OBRA × DISCIPLINA','FF9D174D',['Encarregado','Obra/Cliente','Disciplina','Total de Horas','Qtd. de RDOs'],
-      Object.values(porEncObraDisc).sort((a,b)=>{
-        if(a.encarregado!==b.encarregado) return a.encarregado.localeCompare(b.encarregado);
-        return b.horas-a.horas;
-      }).map(info=>[info.encarregado,info.obra,info.disc,Number(info.horas.toFixed(1)),info.rdos.size]));
+    // Constrói as linhas de uma tabela Encarregado × Obra × Disciplina, com período,
+    // opcionalmente filtrando por um status específico (Andamento, Extra Escopo, etc.)
+    function linhasComboFiltrado(statusFiltro){
+      return Object.values(porEncObraDisc)
+        .filter(c=>!statusFiltro||c.status===statusFiltro)
+        .sort((a,b)=> a.encarregado!==b.encarregado ? a.encarregado.localeCompare(b.encarregado) : b.horas-a.horas)
+        .map(c=>[c.encarregado,c.obra,c.disc,formatarDataBR(c.primeiraData),formatarDataBR(c.ultimaData),Number(c.horas.toFixed(1)),c.rdos.size]);
+    }
+    const colunasCombo=['Encarregado','Obra/Cliente','Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. de RDOs'];
+    const largurasCombo=[22,24,16,13,13,14,12];
 
-    desenharTabela('🔧 RESUMO POR DISCIPLINA — TODOS OS ENCARREGADOS','FF6030BB',['Disciplina','Total de Horas','Qtd. de RDOs'],
-      Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,Number(info.horas.toFixed(1)),info.rdos.size]));
+    desenharTabela('👷 RESUMO GERAL — ENCARREGADO × OBRA × DISCIPLINA',   'FF9D174D',colunasCombo,linhasComboFiltrado(null),largurasCombo);
+    desenharTabela('🔵 RESUMO — EM ANDAMENTO (Encarregado × Obra × Disciplina)','FF1A52C8',colunasCombo,linhasComboFiltrado('and'),largurasCombo);
+    desenharTabela('🟢 RESUMO — EXTRA ESCOPO (Encarregado × Obra × Disciplina)','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
+
+    desenharTabela('🔧 RESUMO POR DISCIPLINA — TODOS OS ENCARREGADOS','FF6030BB',
+      ['Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. de RDOs'],
+      Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),info.rdos.size]),
+      [18,13,13,14,12]);
 
     desenharTabela('📊 HORAS POR OBRA × ENCARREGADO','FF158038',['Obra',...listaEncarregados],
       Object.values(obraEncMatriz).map(linha=>[linha.nomeObra,...listaEncarregados.map(enc=>Number((linha[enc]||0).toFixed(1)))]));
@@ -7370,30 +7381,11 @@ async function exportarBackupCompletoExcel(btn){
     desenharTabela('📊 HORAS POR OBRA × DISCIPLINA','FF1A52C8',['Obra',...listaDisciplinas],
       Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinasChaves.map(chaveDisc=>Number((linha[chaveDisc]||0).toFixed(1)))]));
 
-    // Tabelas específicas por status — mesma separação que já existe nos painéis
-    // 🔵 Andamento e 🟢 Extra Escopo do próprio app, agora também no backup.
-    function resumoPorObraFiltradoPorStatus(status){
-      const acumulado={};
-      registros.filter(r=>r.status===status).forEach(r=>{
-        const chave=normalizarObra(r.obra);
-        if(!acumulado[chave]) acumulado[chave]={nome:r.obra,horas:0,rdos:new Set()};
-        acumulado[chave].horas+=r.horas; acumulado[chave].rdos.add(r.nrdo+'|'+r.data);
-      });
-      return Object.values(acumulado).sort((a,b)=>b.horas-a.horas).map(o=>[o.nome,Number(o.horas.toFixed(1)),o.rdos.size]);
-    }
-
-    desenharTabela('🔵 RESUMO — EM ANDAMENTO (por Obra)','FF1A52C8',['Obra/Cliente','Total de Horas','Qtd. de RDOs'],
-      resumoPorObraFiltradoPorStatus('and'));
-
-    desenharTabela('🟢 RESUMO — EXTRA ESCOPO (por Obra)','FF158038',['Obra/Cliente','Total de Horas','Qtd. de RDOs'],
-      resumoPorObraFiltradoPorStatus('ext'));
-
     // ═══════════════════════════════════════════════════════════════════
-    // DETALHAMENTO COMPLETO — uma linha por funcionário+atividade, ORDENADO
-    // por Encarregado → Data → Obra → Nº RDO → OSE, com as colunas que se
-    // repetem (Encarregado/Data/Nº RDO/Obra/Disciplina) MESCLADAS em vez de
-    // repetidas — fica organizado igual em qualquer aparelho/programa,
-    // sem depender de clicar em nada pra abrir/ver a informação.
+    // DETALHAMENTO COMPLETO — UMA LINHA POR DIA DE TRABALHO DE CADA PESSOA
+    // NUM RDO (Encarregado+Data+Nº RDO+Obra), consolidando as várias
+    // atividades/OSEs/funcionários daquele dia numa célula só — assim o
+    // mesmo dia da mesma pessoa nunca aparece repetido em várias linhas.
     // ═══════════════════════════════════════════════════════════════════
     ws.mergeCells(L,1,L,NUM_COLS_DETALHE);
     const tituloDet=ws.getCell(L,1);
@@ -7404,7 +7396,7 @@ async function exportarBackupCompletoExcel(btn){
     L++;
 
     const headerRowNum=L;
-    const headers=['ENCARREGADO','DATA','Nº RDO','OBRA / CLIENTE','DISCIPLINA','Nº OSE','NOME DO PROJETO (OSE)','STATUS','DESCRIÇÃO DOS SERVIÇOS','FUNCIONÁRIO','FUNÇÃO','HORAS'];
+    const headers=['ENCARREGADO','DATA','Nº RDO','OBRA / CLIENTE','DISCIPLINA','STATUS','DESCRIÇÃO DOS SERVIÇOS (POR OSE)','FUNCIONÁRIOS E HORAS','TOTAL HORAS'];
     headers.forEach((h,ci)=>{
       const cell=ws.getCell(L,ci+1);
       cell.value=h;
@@ -7415,60 +7407,60 @@ async function exportarBackupCompletoExcel(btn){
     });
     ws.getRow(L).height=28;
     L++;
-    const detStartRow=L;
 
-    // Ordena: Encarregado > Data > Obra > Nº RDO > Nº OSE — assim quem abrir já vê
-    // o trabalho de cada pessoa agrupado em sequência, sem precisar filtrar nada
-    registros.sort((a,b)=>{
-      if(a.encarregado!==b.encarregado) return a.encarregado.localeCompare(b.encarregado);
-      if(a.data!==b.data) return a.data.localeCompare(b.data);
-      const chaveObraA=normalizarObra(a.obra),chaveObraB=normalizarObra(b.obra);
-      if(chaveObraA!==chaveObraB) return chaveObraA.localeCompare(chaveObraB);
-      if(a.nrdo!==b.nrdo) return a.nrdo.localeCompare(b.nrdo);
-      return a.oseNumero-b.oseNumero;
+    // Agrupa por Encarregado+Data+Nº RDO+Obra — consolida tudo daquele dia numa linha
+    const porRdoDia={};
+    registros.forEach(r=>{
+      const chave=r.encarregado+'|'+r.data+'|'+r.nrdo+'|'+normalizarObra(r.obra);
+      if(!porRdoDia[chave]){
+        porRdoDia[chave]={encarregado:r.encarregado,data:r.data,nrdo:r.nrdo,obra:r.obra,disc:r.disc,horas:0,statusSet:new Set(),descricoes:[],funcionarios:[]};
+      }
+      const g=porRdoDia[chave];
+      g.horas+=r.horas;
+      const infoStatus=STATUS_INFO_EXCEL[r.status]||{nome:r.status.toUpperCase(),cor:'FF888888'};
+      g.statusSet.add(infoStatus.nome);
+      const descComp=`OSE${String(r.oseNumero).padStart(2,'0')} (${r.nomeProjeto}) [${infoStatus.nome}]: ${r.descricao}`;
+      if(!g.descricoes.includes(descComp)) g.descricoes.push(descComp);
+      if(r.funcionario&&r.funcionario!=='—') g.funcionarios.push(`${r.funcionario} (${r.funcao}): ${r.horas.toFixed(1)}h`);
     });
 
-    // Cada linha SEMPRE mostra todos os seus dados (data incluída) — nada de célula
-    // mesclada, que no celular pode parecer "sumida" quando a linha de cima (onde o
-    // valor realmente está) já rolou pra fora da tela. Pra ainda dar pra enxergar o
-    // agrupamento por RDO, uso faixas de cor alternadas: toda vez que muda de RDO, a
-    // cor de fundo alterna — fica claro onde um RDO termina e o outro começa, sem
-    // esconder nenhum dado.
+    const linhasOrdenadas=Object.values(porRdoDia).sort((a,b)=>{
+      if(a.encarregado!==b.encarregado) return a.encarregado.localeCompare(b.encarregado);
+      return a.data.localeCompare(b.data);
+    });
+
     let corFaixaAtual=true;
-    let grupoAnteriorChave=null;
-
-    registros.forEach((r)=>{
-      const grupoChave=r.encarregado+'|'+r.data+'|'+r.nrdo+'|'+normalizarObra(r.obra);
-      if(grupoChave!==grupoAnteriorChave){ corFaixaAtual=!corFaixaAtual; grupoAnteriorChave=grupoChave; }
+    let encarregadoAnterior=null;
+    linhasOrdenadas.forEach(g=>{
+      if(g.encarregado!==encarregadoAnterior){ corFaixaAtual=!corFaixaAtual; encarregadoAnterior=g.encarregado; }
       const corFundo=corFaixaAtual?'FFFFFFFF':'FFEDF1F8';
+      const statusTexto=[...g.statusSet].join(' + ');
+      const primeiraCorStatus=STATUS_INFO_EXCEL[Object.keys(STATUS_INFO_EXCEL).find(k=>STATUS_INFO_EXCEL[k].nome===[...g.statusSet][0])]?.cor||'FF888888';
 
-      const infoStatus=STATUS_INFO_EXCEL[r.status]||{nome:r.status.toUpperCase(),cor:'FF888888'};
-      const linha=[r.encarregado,formatarDataBR(r.data),r.nrdo,r.obra,r.disc,r.oseNumero,r.nomeProjeto,infoStatus.nome,r.descricao,r.funcionario,r.funcao,r.horas];
+      const linha=[g.encarregado,formatarDataBR(g.data),g.nrdo,g.obra,g.disc,statusTexto,g.descricoes.join(' | '),g.funcionarios.join(' | '),Number(g.horas.toFixed(1))];
       linha.forEach((v,ci)=>{
         const c=ws.getCell(L,ci+1);
         c.value=v;
         c.font={size:10};
         c.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFundo}};
-        c.alignment={vertical:'middle',horizontal:(ci===8?'left':'center'),wrapText:ci===8};
+        c.alignment={vertical:'top',horizontal:(ci===6||ci===7?'left':'center'),wrapText:(ci===6||ci===7)};
         c.border={top:{style:'thin',color:{argb:'FFDDDDDD'}},bottom:{style:'thin',color:{argb:'FFDDDDDD'}},left:{style:'thin',color:{argb:'FFEEEEEE'}},right:{style:'thin',color:{argb:'FFEEEEEE'}}};
       });
-      const statusCell=ws.getCell(L,8);
-      statusCell.font={bold:true,color:{argb:'FFFFFFFF'},size:9.5};
-      statusCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:infoStatus.cor}};
-      statusCell.alignment={horizontal:'center',vertical:'middle'};
-      ws.getCell(L,2).font={bold:true,size:10}; // data em negrito — sempre visível, nunca escondida
-      ws.getCell(L,12).numFmt='0.0';
-      ws.getCell(L,12).font={bold:true,size:10.5};
+      ws.getCell(L,2).font={bold:true,size:10};
       ws.getCell(L,1).font={bold:true,size:10};
+      ws.getCell(L,6).font={bold:true,color:{argb:'FFFFFFFF'},size:9};
+      ws.getCell(L,6).fill={type:'pattern',pattern:'solid',fgColor:{argb:primeiraCorStatus}};
+      ws.getCell(L,6).alignment={horizontal:'center',vertical:'middle'};
+      ws.getCell(L,9).numFmt='0.0';
+      ws.getCell(L,9).font={bold:true,size:10.5};
       L++;
     });
 
     ws.autoFilter={from:{row:headerRowNum,column:1},to:{row:headerRowNum,column:NUM_COLS_DETALHE}};
-    // Sem congelar linha/coluna — a pessoa prefere rolar a página inteira livremente
+    // Sem congelar linha/coluna — a página rola livre, do início ao fim
     ws.getColumn(1).width=22; ws.getColumn(2).width=12; ws.getColumn(3).width=11; ws.getColumn(4).width=26;
-    ws.getColumn(5).width=16; ws.getColumn(6).width=8; ws.getColumn(7).width=26; ws.getColumn(8).width=16;
-    ws.getColumn(9).width=40; ws.getColumn(10).width=22; ws.getColumn(11).width=16; ws.getColumn(12).width=9;
-    for(let c=13;c<=largura;c++) ws.getColumn(c).width=16;
+    ws.getColumn(5).width=16; ws.getColumn(6).width=20; ws.getColumn(7).width=55; ws.getColumn(8).width=45; ws.getColumn(9).width=11;
+    for(let c=10;c<=largura;c++) ws.getColumn(c).width=16;
 
     const buffer=await wb.xlsx.writeBuffer();
     const blob=new Blob([buffer],{type:'application/octet-stream'});
