@@ -7212,8 +7212,8 @@ function coletarTodosOsRegistrosFlat(){
       if(!o.status||o.status==='sem') return;
       const descTexto=(o.desc||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim()||'—';
       const base={
-        data:h.data,nrdo:h.nrdo||'—',obra:h.obra||'—',disc:(h.disc||'(SEM DISCIPLINA)').trim().toUpperCase(),
-        encarregado:h.enc||'—',oseNumero:idx+1,nomeProjeto:(o.name||'—').toUpperCase(),
+        data:h.data,nrdo:h.nrdo||'—',obra:(h.obra||'—').trim().toUpperCase(),disc:(h.disc||'(SEM DISCIPLINA)').trim().toUpperCase(),
+        encarregado:(h.enc||'—').trim().toUpperCase(),oseNumero:idx+1,nomeProjeto:(o.name||'—').toUpperCase(),
         status:o.status,descricao:descTexto.toUpperCase()
       };
       const trabalhadoresComHora=(d.workers||[]).filter(w=>parseHrs((w.hrs||[])[idx]||'')>0);
@@ -7264,7 +7264,7 @@ async function exportarBackupCompletoExcel(btn){
       if(!nomesDisciplinasPorChave[chaveDisc]) nomesDisciplinasPorChave[chaveDisc]=r.disc;
       const nomeDiscCanonico=nomesDisciplinasPorChave[chaveDisc];
       if(!porDisc[chaveDisc]) porDisc[chaveDisc]={nome:nomeDiscCanonico,horas:0,rdos:new Set(),primeiraData:r.data,ultimaData:r.data};
-      porDisc[chaveDisc].horas+=r.horas; porDisc[chaveDisc].rdos.add(r.nrdo+'|'+r.data);
+      porDisc[chaveDisc].horas+=r.horas; porDisc[chaveDisc].rdos.add(r.nrdo);
       if(r.data<porDisc[chaveDisc].primeiraData) porDisc[chaveDisc].primeiraData=r.data;
       if(r.data>porDisc[chaveDisc].ultimaData) porDisc[chaveDisc].ultimaData=r.data;
 
@@ -7280,7 +7280,7 @@ async function exportarBackupCompletoExcel(btn){
       const chaveCombo=r.encarregado+'|'+chaveObra+'|'+chaveDisc+'|'+r.status;
       if(!porEncObraDisc[chaveCombo]) porEncObraDisc[chaveCombo]={encarregado:r.encarregado,obra:r.obra,disc:nomeDiscCanonico,status:r.status,horas:0,rdos:new Set(),primeiraData:r.data,ultimaData:r.data};
       const combo=porEncObraDisc[chaveCombo];
-      combo.horas+=r.horas; combo.rdos.add(r.nrdo+'|'+r.data);
+      combo.horas+=r.horas; combo.rdos.add(r.nrdo);
       if(r.data<combo.primeiraData) combo.primeiraData=r.data;
       if(r.data>combo.ultimaData) combo.ultimaData=r.data;
     });
@@ -7323,8 +7323,16 @@ async function exportarBackupCompletoExcel(btn){
     });
     L+=1;
 
+    // Formata "3 (RDO-001, RDO-002, RDO-003)" em vez de só o número "3" — assim dá pra
+    // saber a quantidade E quais são os RDOs, sem precisar abrir o Detalhamento.
+    function formatarListaRDOs(setDeRdos){
+      const lista=[...setDeRdos].sort();
+      return `${lista.length} (${lista.join(', ')})`;
+    }
+
     function desenharTabela(titulo,corTitulo,colunas,linhas,largurasColunas){
-      ws.mergeCells(L,1,L,colunas.length);
+      ws.mergeCells(L,1,L,largura);
+      for(let c=1;c<=largura;c++) ws.getCell(L,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:corTitulo}};
       const tCell=ws.getCell(L,1);
       tCell.value=titulo;
       tCell.font={bold:true,size:12,color:{argb:'FFFFFFFF'}};
@@ -7361,19 +7369,19 @@ async function exportarBackupCompletoExcel(btn){
       return Object.values(porEncObraDisc)
         .filter(c=>!statusFiltro||c.status===statusFiltro)
         .sort((a,b)=> a.encarregado!==b.encarregado ? a.encarregado.localeCompare(b.encarregado) : b.horas-a.horas)
-        .map(c=>[c.encarregado,c.obra,c.disc,formatarDataBR(c.primeiraData),formatarDataBR(c.ultimaData),Number(c.horas.toFixed(1)),c.rdos.size]);
+        .map(c=>[c.encarregado,c.obra,c.disc,formatarDataBR(c.primeiraData),formatarDataBR(c.ultimaData),Number(c.horas.toFixed(1)),formatarListaRDOs(c.rdos)]);
     }
-    const colunasCombo=['Encarregado','Obra/Cliente','Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. de RDOs'];
-    const largurasCombo=[22,24,16,13,13,14,12];
+    const colunasCombo=['Encarregado','Obra/Cliente','Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'];
+    const largurasCombo=[22,24,16,13,13,14,32];
 
     desenharTabela('👷 RESUMO GERAL — ENCARREGADO × OBRA × DISCIPLINA',   'FF9D174D',colunasCombo,linhasComboFiltrado(null),largurasCombo);
     desenharTabela('🔵 RESUMO — EM ANDAMENTO (Encarregado × Obra × Disciplina)','FF1A52C8',colunasCombo,linhasComboFiltrado('and'),largurasCombo);
     desenharTabela('🟢 RESUMO — EXTRA ESCOPO (Encarregado × Obra × Disciplina)','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
 
     desenharTabela('🔧 RESUMO POR DISCIPLINA — TODOS OS ENCARREGADOS','FF6030BB',
-      ['Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. de RDOs'],
-      Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),info.rdos.size]),
-      [18,13,13,14,12]);
+      ['Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'],
+      Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),formatarListaRDOs(info.rdos)]),
+      [18,13,13,14,32]);
 
     desenharTabela('📊 HORAS POR OBRA × ENCARREGADO','FF158038',['Obra',...listaEncarregados],
       Object.values(obraEncMatriz).map(linha=>[linha.nomeObra,...listaEncarregados.map(enc=>Number((linha[enc]||0).toFixed(1)))]));
@@ -7387,11 +7395,11 @@ async function exportarBackupCompletoExcel(btn){
     // atividades/OSEs/funcionários daquele dia numa célula só — assim o
     // mesmo dia da mesma pessoa nunca aparece repetido em várias linhas.
     // ═══════════════════════════════════════════════════════════════════
-    ws.mergeCells(L,1,L,NUM_COLS_DETALHE);
+    ws.mergeCells(L,1,L,largura);
+    for(let c=1;c<=largura;c++) ws.getCell(L,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
     const tituloDet=ws.getCell(L,1);
     tituloDet.value='📊 DETALHAMENTO COMPLETO — TODOS OS RDOs DE TODOS OS ENCARREGADOS';
     tituloDet.font={bold:true,color:{argb:'FFFFFFFF'},size:12};
-    tituloDet.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
     ws.getRow(L).height=22;
     L++;
 
