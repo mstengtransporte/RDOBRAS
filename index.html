@@ -7190,10 +7190,10 @@ let projetosAtuaisCache={};
 // ═══════════════════════════════════════════════════════════════════════
 const STATUS_INFO_EXCEL={
   and:{nome:'EM ANDAMENTO',cor:'FF1A52C8'},
-  ext:{nome:'EXTRA ESCOPO',cor:'FF158038'},
+  ext:{nome:'EXTRA ESCOPO / ADICIONAL',cor:'FF158038'},
   conc:{nome:'CONCLUÍDO',cor:'FF6830CC'},
   par:{nome:'PARALISADO',cor:'FFE07010'},
-  blq:{nome:'FALTA/SAIU CEDO',cor:'FFCC2020'}
+  blq:{nome:'FALTA / SAIU CEDO',cor:'FFCC2020'}
 };
 
 // Varre TODOS os RDOs e devolve uma linha pra cada combinação de
@@ -7331,14 +7331,16 @@ async function exportarBackupCompletoExcel(btn){
     const linhasInfo=[
       ['Gerado em:',new Date().toLocaleString('pt-BR')],
       ['Total de RDOs:',rdosUnicos],
-      ['Total de Horas (H.H):',totalHorasGeral.toFixed(1)],
+      ['Total de Horas (H.H):',Number(totalHorasGeral.toFixed(1))],
       ['Quantidade de Obras:',obrasUnicas],
       ['Quantidade de Encarregados:',encarregadosUnicos],
       ['Quantidade de Disciplinas:',listaDisciplinas.length]
     ];
     linhasInfo.forEach(linha=>{
-      ws.getCell(L,1).value=linha[0]; ws.getCell(L,1).font={bold:true,size:11};
-      ws.getCell(L,2).value=linha[1]; ws.getCell(L,2).font={size:11};
+      ws.getCell(L,1).value=linha[0]; ws.getCell(L,1).font={bold:true,size:11}; ws.getCell(L,1).alignment={horizontal:'left'};
+      const cVal=ws.getCell(L,2);
+      cVal.value=linha[1]; cVal.font={size:11}; cVal.alignment={horizontal:'left'};
+      if(typeof linha[1]==='number'&&!Number.isInteger(linha[1])) cVal.numFmt='0.0';
       L++;
     });
     L+=1;
