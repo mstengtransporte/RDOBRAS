@@ -5303,7 +5303,8 @@ async function exportarXLSX(){
   });
 
   // Linha TOTAL
-  ws1.getCell(L,3).value='TOTAL DE HORAS'; ws1.getCell(L,3).font={bold:true};
+  ws1.getCell(L,3).value='TOTAL DE HORAS'; ws1.getCell(L,3).font={bold:true}; ws1.getCell(L,3).alignment={horizontal:'center'};
+  [1,2,3].forEach(col=>{ ws1.getCell(L,col).border={top:{style:'medium',color:{argb:'FF000000'}},bottom:{style:'medium',color:{argb:'FF000000'}},left:{style:'thin',color:{argb:'FF000000'}},right:{style:'thin',color:{argb:'FF000000'}}}; });
   for(let o=1;o<=NUM_OSE;o++){
     const status=oseStatus[o]||'sem';
     const c=ws1.getCell(L,3+o);
@@ -5311,24 +5312,34 @@ async function exportarXLSX(){
     c.font={bold:true,color:{argb:corFonte[status]}};
     c.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFill[status]}};
     c.alignment={horizontal:'center'};
+    c.border={top:{style:'medium',color:{argb:'FF000000'}},bottom:{style:'medium',color:{argb:'FF000000'}},left:{style:'thin',color:{argb:'FF000000'}},right:{style:'thin',color:{argb:'FF000000'}}};
   }
   const ctFinal=ws1.getCell(L,10);
   ctFinal.value=Number(grand.toFixed(1)); ctFinal.numFmt='0.0';
   ctFinal.font={bold:true,color:{argb:'FFFFFFFF'}};
   ctFinal.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
   ctFinal.alignment={horizontal:'center'};
+  ctFinal.border={top:{style:'medium',color:{argb:'FF000000'}},bottom:{style:'medium',color:{argb:'FF000000'}},left:{style:'thin',color:{argb:'FF000000'}},right:{style:'thin',color:{argb:'FF000000'}}};
   L+=2;
 
-  // Legenda
+  // Legenda — 6 caixas do mesmo tamanho, mesclando colunas em grupos parelhos (não
+  // reaproveitando as larguras da tabela principal, que são desiguais entre si)
   ws1.getCell(L,1).value='LEGENDA DE STATUS'; ws1.getCell(L,1).font={bold:true,size:11};
   L++;
   const legendOrder=['sem','and','ext','par','blq','conc'];
+  const gruposLegenda=[[1,2],[3,4],[5,6],[7,8],[9],[10]]; // 4 caixas com 2 colunas + 2 caixas com 1 coluna = 10
   legendOrder.forEach((st,ci)=>{
-    const c=ws1.getCell(L,ci+1);
+    const grupo=gruposLegenda[ci];
+    if(grupo.length>1) ws1.mergeCells(L,grupo[0],L,grupo[grupo.length-1]);
+    const c=ws1.getCell(L,grupo[0]);
     c.value=sL[st]; c.font={bold:true,size:8.5,color:{argb:corFonte[st]}};
     c.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFill[st]}};
     c.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    grupo.forEach(col=>{
+      ws1.getCell(L,col).border={top:{style:'thin',color:{argb:'FF000000'}},bottom:{style:'thin',color:{argb:'FF000000'}},left:{style:'thin',color:{argb:'FF000000'}},right:{style:'thin',color:{argb:'FF000000'}}};
+    });
   });
+  ws1.getRow(L).height=28;
   L+=2;
 
   // OSEs detalhadas
@@ -5341,13 +5352,21 @@ async function exportarXLSX(){
   d.oses.forEach((o,idx)=>{
     const n=idx+1;
     const status=o.status||'sem';
-    ws1.mergeCells(L,1,L,NCOL);
+    ws1.mergeCells(L,1,L,NCOL-1);
     const linha=ws1.getCell(L,1);
-    linha.value=`OSE 0${n} — ${o.name||'(sem nome)'}  |  Status: ${sL[status]}  |  Responsável: ${o.resp||'—'}  |  Total: ${fmt(oseTotals[n])}h`;
+    linha.value=`OSE 0${n} — ${o.name||'(sem nome)'}  |  Status: ${sL[status]}  |  Responsável: ${o.resp||'—'}`;
     linha.font={bold:true,color:{argb:corFonte[status]},size:10};
     linha.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFill[status]}};
     linha.alignment={horizontal:'left',vertical:'middle',indent:1};
-    for(let c=1;c<=NCOL;c++) ws1.getCell(L,c).border={top:{style:'medium',color:{argb:'FF000000'}},bottom:{style:'thin',color:{argb:'FF888888'}},left:{style:'medium',color:{argb:'FF000000'}},right:{style:'medium',color:{argb:'FF000000'}}};
+    for(let c=1;c<NCOL;c++) ws1.getCell(L,c).border={top:{style:'medium',color:{argb:'FF000000'}},bottom:{style:'thin',color:{argb:'FF888888'}},left:{style:'medium',color:{argb:'FF000000'}},right:{style:'medium',color:{argb:'FF000000'}}};
+    // Total dessa OSE — célula própria na coluna J, alinhada à direita, na mesma linha
+    // do título, exatamente sob a coluna "TOTAL DE HORAS/DIA" da tabela principal.
+    const totalCell=ws1.getCell(L,NCOL);
+    totalCell.value=Number((oseTotals[n]||0).toFixed(1)); totalCell.numFmt='0.0';
+    totalCell.font={bold:true,color:{argb:corFonte[status]},size:10};
+    totalCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFill[status]}};
+    totalCell.alignment={horizontal:'right',vertical:'middle',indent:1};
+    totalCell.border={top:{style:'medium',color:{argb:'FF000000'}},bottom:{style:'thin',color:{argb:'FF888888'}},left:{style:'medium',color:{argb:'FF000000'}},right:{style:'medium',color:{argb:'FF000000'}}};
     L++;
     ws1.mergeCells(L,1,L,NCOL);
     const descCell=ws1.getCell(L,1);
@@ -5365,8 +5384,8 @@ async function exportarXLSX(){
   });
 
   ws1.getColumn(1).width=15; ws1.getColumn(2).width=26; ws1.getColumn(3).width=18;
-  for(let c=4;c<=9;c++) ws1.getColumn(c).width=9;
-  ws1.getColumn(10).width=14;
+  for(let c=4;c<=9;c++) ws1.getColumn(c).width=11;
+  ws1.getColumn(10).width=16;
 
   const buffer=await wb.xlsx.writeBuffer();
   const blob=new Blob([buffer],{type:'application/octet-stream'});
