@@ -7401,20 +7401,20 @@ async function exportarBackupCompletoExcel(btn){
     const colunasCombo=['Encarregado','Obra/Cliente','Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'];
     const largurasCombo=[22,24,16,13,13,14,32];
 
-    desenharTabela('👷 RESUMO GERAL — ENCARREGADO × OBRA × DISCIPLINA',   'FF9D174D',colunasCombo,linhasComboGeral(),largurasCombo);
+    desenharTabela('👷 TOTAL GERAL DE HORAS — POR ENCARREGADO, POR OBRA E POR DISCIPLINA',   'FF9D174D',colunasCombo,linhasComboGeral(),largurasCombo);
     // Removida a tabela de "Resumo — Em Andamento" a pedido — o Resumo Geral já cobre
     // isso, e ficava confuso ter as duas. O Extra Escopo continua, esse é essencial.
-    desenharTabela('🟢 RESUMO — EXTRA ESCOPO (Encarregado × Obra × Disciplina)','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
+    desenharTabela('🟢 TOTAL DE HORAS EXTRAS (EXTRA ESCOPO / ADICIONAL) — POR ENCARREGADO, OBRA E DISCIPLINA','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
 
-    desenharTabela('🔧 RESUMO POR DISCIPLINA — TODOS OS ENCARREGADOS','FF6030BB',
+    desenharTabela('🔧 TOTAL GERAL DE HORAS DE TODAS AS OBRAS — POR DISCIPLINA','FF6030BB',
       ['Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'],
       Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),formatarListaRDOs(info.rdos)]),
       [18,13,13,14,32]);
 
-    desenharTabela('📊 HORAS POR OBRA × ENCARREGADO','FF158038',['Obra',...listaEncarregados],
+    desenharTabela('📊 TOTAL GERAL DE HORAS POR OBRA — E POR CADA ENCARREGADO','FFC2410C',['Obra',...listaEncarregados],
       Object.values(obraEncMatriz).map(linha=>[linha.nomeObra,...listaEncarregados.map(enc=>Number((linha[enc]||0).toFixed(1)))]));
 
-    desenharTabela('📊 HORAS POR OBRA × DISCIPLINA','FF1A52C8',['Obra',...listaDisciplinas],
+    desenharTabela('📊 TOTAL GERAL DE HORAS POR OBRA — E POR DISCIPLINA','FF1A52C8',['Obra',...listaDisciplinas],
       Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinasChaves.map(chaveDisc=>Number((linha[chaveDisc]||0).toFixed(1)))]));
 
     // ═══════════════════════════════════════════════════════════════════
