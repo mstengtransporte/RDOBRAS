@@ -7262,7 +7262,7 @@ async function exportarBackupCompletoExcel(btn){
     const encarregadosUnicos=new Set(registros.map(r=>r.encarregado)).size;
 
     // ── Agregações base ──
-    const porDisc={};
+    const porDisc={},porObraGeral={},porEncGeral={};
     const obraEncMatriz={},obraDiscMatriz={};
     const nomesEncarregados=new Set();
     const nomesDisciplinasPorChave={};
@@ -7270,6 +7270,20 @@ async function exportarBackupCompletoExcel(btn){
     registros.forEach(r=>{
       const chaveObra=normalizarObra(r.obra);
       nomesEncarregados.add(r.encarregado);
+
+      // Total GERAL de uma obra específica — soma TODAS as disciplinas dela juntas.
+      if(!porObraGeral[chaveObra]) porObraGeral[chaveObra]={nome:r.obra,horas:0,rdos:new Set(),primeiraData:r.data,ultimaData:r.data};
+      const og=porObraGeral[chaveObra];
+      og.horas+=r.horas; og.rdos.add(r.nrdo);
+      if(r.data<og.primeiraData) og.primeiraData=r.data;
+      if(r.data>og.ultimaData) og.ultimaData=r.data;
+
+      // Total CONSOLIDADO de um encarregado — soma TODAS as obras dele juntas.
+      if(!porEncGeral[r.encarregado]) porEncGeral[r.encarregado]={horas:0,rdos:new Set(),obras:new Set(),primeiraData:r.data,ultimaData:r.data};
+      const eg=porEncGeral[r.encarregado];
+      eg.horas+=r.horas; eg.rdos.add(r.nrdo); eg.obras.add(chaveObra);
+      if(r.data<eg.primeiraData) eg.primeiraData=r.data;
+      if(r.data>eg.ultimaData) eg.ultimaData=r.data;
 
       const chaveDisc=normalizarObra(r.disc);
       if(!nomesDisciplinasPorChave[chaveDisc]) nomesDisciplinasPorChave[chaveDisc]=r.disc;
@@ -7331,7 +7345,7 @@ async function exportarBackupCompletoExcel(btn){
     const linhasInfo=[
       ['Gerado em:',new Date().toLocaleString('pt-BR')],
       ['Total de RDOs:',rdosUnicos],
-      ['Total de Horas (H.H):',Number(totalHorasGeral.toFixed(1))],
+      ['Total Consolidado Final da Empresa (Total de Horas):',Number(totalHorasGeral.toFixed(1))],
       ['Quantidade de Obras:',obrasUnicas],
       ['Quantidade de Encarregados:',encarregadosUnicos],
       ['Quantidade de Disciplinas:',listaDisciplinas.length]
@@ -7401,21 +7415,39 @@ async function exportarBackupCompletoExcel(btn){
     const colunasCombo=['Encarregado','Obra/Cliente','Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'];
     const largurasCombo=[22,24,16,13,13,14,32];
 
-    desenharTabela('👷 TOTAL GERAL DE HORAS — POR ENCARREGADO, POR OBRA E POR DISCIPLINA',   'FF9D174D',colunasCombo,linhasComboGeral(),largurasCombo);
-    // Removida a tabela de "Resumo — Em Andamento" a pedido — o Resumo Geral já cobre
-    // isso, e ficava confuso ter as duas. O Extra Escopo continua, esse é essencial.
-    desenharTabela('🟢 TOTAL DE HORAS EXTRAS (EXTRA ESCOPO / ADICIONAL) — POR ENCARREGADO, OBRA E DISCIPLINA','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
+    // 1) TOTAL POR ENCARREGADO — detalhado por obra (uma linha por combinação)
+    desenharTabela('👷 TOTAL DE HORAS POR ENCARREGADO — DETALHADO POR OBRA E DISCIPLINA','FF9D174D',colunasCombo,linhasComboGeral(),largurasCombo);
 
-    desenharTabela('🔧 TOTAL GERAL DE HORAS DE TODAS AS OBRAS — POR DISCIPLINA','FF6030BB',
+    // 2) TOTAL CONSOLIDADO POR ENCARREGADO — todas as obras da empresa somadas numa pessoa
+    desenharTabela('👷 TOTAL CONSOLIDADO DE HORAS POR ENCARREGADO — TODAS AS OBRAS DA EMPRESA','FF9D174D',
+      ['Encarregado','Primeira Data','Última Data','Total de Horas','Obras Diferentes','Qtd. e Números dos RDOs'],
+      Object.entries(porEncGeral).sort((a,b)=>b[1].horas-a[1].horas).map(([nome,info])=>
+        [nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),info.obras.size,formatarListaRDOs(info.rdos)]),
+      [22,13,13,14,14,32]);
+
+    // 3) TOTAL POR DISCIPLINA — detalhado por obra, visão cruzada (Obra nas linhas, Disciplina nas colunas)
+    desenharTabela('🔧 TOTAL DE HORAS POR DISCIPLINA — DETALHADO POR OBRA (VISÃO CRUZADA)','FF1A52C8',['Obra',...listaDisciplinas],
+      Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinasChaves.map(chaveDisc=>Number((linha[chaveDisc]||0).toFixed(1)))]));
+
+    // 4) TOTAL GERAL DE UMA OBRA ESPECÍFICA — soma todas as disciplinas dela
+    desenharTabela('🏭 TOTAL GERAL DA OBRA — TODAS AS DISCIPLINAS SOMADAS','FFC2410C',
+      ['Obra/Cliente','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'],
+      Object.values(porObraGeral).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),formatarListaRDOs(info.rdos)]),
+      [24,13,13,14,32]);
+
+    // 5) TOTAL CONSOLIDADO POR DISCIPLINA — todas as obras da empresa somadas numa disciplina
+    desenharTabela('🔧 TOTAL CONSOLIDADO POR DISCIPLINA — TODAS AS OBRAS DA EMPRESA','FF6030BB',
       ['Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'],
       Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),formatarListaRDOs(info.rdos)]),
       [18,13,13,14,32]);
 
-    desenharTabela('📊 TOTAL GERAL DE HORAS POR OBRA — E POR CADA ENCARREGADO','FFC2410C',['Obra',...listaEncarregados],
-      Object.values(obraEncMatriz).map(linha=>[linha.nomeObra,...listaEncarregados.map(enc=>Number((linha[enc]||0).toFixed(1)))]));
+    // 6) TOTAL CONSOLIDADO DE EXTRA ESCOPO — todas as obras da empresa, detalhado por
+    // encarregado/obra/disciplina (verde é sempre e só Extra Escopo, em qualquer lugar)
+    desenharTabela('🟢 TOTAL CONSOLIDADO DE EXTRA ESCOPO / ADICIONAL — TODAS AS OBRAS DA EMPRESA','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
 
-    desenharTabela('📊 TOTAL GERAL DE HORAS POR OBRA — E POR DISCIPLINA','FF1A52C8',['Obra',...listaDisciplinas],
-      Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinasChaves.map(chaveDisc=>Number((linha[chaveDisc]||0).toFixed(1)))]));
+    // 7) TOTAL POR ENCARREGADO × OBRA — visão cruzada complementar (rápida, em grade)
+    desenharTabela('👷 TOTAL DE HORAS POR ENCARREGADO — DETALHADO POR OBRA (VISÃO CRUZADA)','FF9D174D',['Obra',...listaEncarregados],
+      Object.values(obraEncMatriz).map(linha=>[linha.nomeObra,...listaEncarregados.map(enc=>Number((linha[enc]||0).toFixed(1)))]));
 
     // ═══════════════════════════════════════════════════════════════════
     // DETALHAMENTO COMPLETO — UMA LINHA POR DIA DE TRABALHO DE CADA PESSOA
