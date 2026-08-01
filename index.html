@@ -5368,48 +5368,6 @@ async function exportarXLSX(){
   for(let c=4;c<=9;c++) ws1.getColumn(c).width=9;
   ws1.getColumn(10).width=14;
 
-  // ── ABA 2: RESUMO H.H ──
-  const ws2=wb.addWorksheet('Resumo de Horas',{properties:{tabColor:{argb:'FF6030BB'}}});
-  ws2.mergeCells(1,1,1,5);
-  ws2.getCell(1,1).value='RESUMO DE HORAS POR OSE';
-  ws2.getCell(1,1).font={bold:true,size:13,color:{argb:'FFFFFFFF'}};
-  ws2.getCell(1,1).alignment={horizontal:'center',vertical:'middle'};
-  for(let c=1;c<=5;c++) ws2.getCell(1,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
-  ws2.getRow(1).height=22;
-
-  const headers2=['OSE','NOME/PROJETO','STATUS','RESPONSÁVEL','TOTAL DE HORAS'];
-  headers2.forEach((hd,ci)=>{
-    const c=ws2.getCell(3,ci+1);
-    c.value=hd; c.font={bold:true,color:{argb:'FFFFFFFF'},size:10};
-    c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
-    c.alignment={horizontal:'center',vertical:'middle'};
-  });
-  ws2.getRow(3).height=22;
-
-  d.oses.forEach((o,idx)=>{
-    const n=idx+1; const status=o.status||'sem'; const row=4+idx;
-    ws2.getCell(row,1).value=`OSE 0${n}`; ws2.getCell(row,1).alignment={horizontal:'center'};
-    ws2.getCell(row,2).value=o.name||''; ws2.getCell(row,2).font={size:10};
-    const stCell=ws2.getCell(row,3);
-    stCell.value=sL[status]; stCell.font={bold:true,color:{argb:corFonte[status]},size:9.5};
-    stCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFill[status]}};
-    stCell.alignment={horizontal:'center',vertical:'middle'};
-    ws2.getCell(row,4).value=o.resp||''; ws2.getCell(row,4).font={size:10};
-    const hCell=ws2.getCell(row,5);
-    hCell.value=Number((oseTotals[n]||0).toFixed(1)); hCell.numFmt='0.0'; hCell.font={bold:true}; hCell.alignment={horizontal:'center'};
-  });
-  const linhaTotal2=4+d.oses.length;
-  ws2.getCell(linhaTotal2,4).value='TOTAL GERAL'; ws2.getCell(linhaTotal2,4).font={bold:true,color:{argb:'FFFFFFFF'}};
-  ws2.getCell(linhaTotal2,4).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
-  ws2.getCell(linhaTotal2,4).alignment={horizontal:'right'};
-  const hTotalCell=ws2.getCell(linhaTotal2,5);
-  hTotalCell.value=Number(grand.toFixed(1)); hTotalCell.numFmt='0.0';
-  hTotalCell.font={bold:true,color:{argb:'FFFFFFFF'}};
-  hTotalCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
-  hTotalCell.alignment={horizontal:'center'};
-
-  ws2.getColumn(1).width=8; ws2.getColumn(2).width=30; ws2.getColumn(3).width=20; ws2.getColumn(4).width=22; ws2.getColumn(5).width=14;
-
   const buffer=await wb.xlsx.writeBuffer();
   const blob=new Blob([buffer],{type:'application/octet-stream'});
   const url=URL.createObjectURL(blob);
