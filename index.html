@@ -7199,6 +7199,17 @@ const STATUS_INFO_EXCEL={
 // Varre TODOS os RDOs e devolve uma linha pra cada combinação de
 // funcionário+OSE — é esse formato "achatado" (sem agrupamento visual) que
 // deixa o Excel filtrar/ordenar/somar sozinho, sem precisar de fórmula.
+// Garante que o Nº RDO sempre apareça como "RDO-017", mesmo se no cadastro antigo (antes
+// da numeração automática existir) alguém tiver digitado só "017" ou "0-017" — sem essa
+// palavra na frente, ficava difícil de saber que aquilo é um número de RDO.
+function formatarNRDO(nrdo){
+  if(!nrdo||nrdo==='—') return nrdo;
+  const texto=String(nrdo).trim();
+  const m=texto.match(/(\d+)(?!.*\d)/); // pega o ÚLTIMO grupo de dígitos (ex: "0-017" → "017", não "0")
+  if(m) return `RDO-${m[1].padStart(3,'0')}`;
+  return texto.toUpperCase();
+}
+
 function coletarTodosOsRegistrosFlat(){
   const registros=[];
   for(let i=0;i<localStorage.length;i++){
@@ -7212,7 +7223,7 @@ function coletarTodosOsRegistrosFlat(){
       if(!o.status||o.status==='sem') return;
       const descTexto=(o.desc||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim()||'—';
       const base={
-        data:h.data,nrdo:h.nrdo||'—',obra:(h.obra||'—').trim().toUpperCase(),disc:(h.disc||'(SEM DISCIPLINA)').trim().toUpperCase(),
+        data:h.data,nrdo:formatarNRDO(h.nrdo)||'—',obra:(h.obra||'—').trim().toUpperCase(),disc:(h.disc||'(SEM DISCIPLINA)').trim().toUpperCase(),
         encarregado:(h.enc||'—').trim().toUpperCase(),oseNumero:idx+1,nomeProjeto:(o.name||'—').toUpperCase(),
         status:o.status,descricao:descTexto.toUpperCase()
       };
@@ -7255,7 +7266,7 @@ async function exportarBackupCompletoExcel(btn){
     const obraEncMatriz={},obraDiscMatriz={};
     const nomesEncarregados=new Set();
     const nomesDisciplinasPorChave={};
-    const porEncObraDisc={};
+    const porEncObraDisc={},porEncObraDiscGeral={};
     registros.forEach(r=>{
       const chaveObra=normalizarObra(r.obra);
       nomesEncarregados.add(r.encarregado);
@@ -7274,9 +7285,18 @@ async function exportarBackupCompletoExcel(btn){
       if(!obraDiscMatriz[chaveObra]) obraDiscMatriz[chaveObra]={nomeObra:r.obra};
       obraDiscMatriz[chaveObra][chaveDisc]=(obraDiscMatriz[chaveObra][chaveDisc]||0)+r.horas;
 
-      // Agrupamento combinado (usado nas 3 tabelas de resumo: geral, Andamento, Extra
-      // Escopo) — cada linha vira Encarregado + Obra + Disciplina + Status, com o
-      // período (primeira/última data) que aquilo cobre.
+      // Agrupamento GERAL — Encarregado + Obra + Disciplina, somando TODOS os status
+      // juntos (não separa por Em Andamento/Extra Escopo aqui — isso é só pro resumo
+      // geral, pra não duplicar o mesmo RDO em duas linhas diferentes).
+      const chaveGeral=r.encarregado+'|'+chaveObra+'|'+chaveDisc;
+      if(!porEncObraDiscGeral[chaveGeral]) porEncObraDiscGeral[chaveGeral]={encarregado:r.encarregado,obra:r.obra,disc:nomeDiscCanonico,horas:0,rdos:new Set(),primeiraData:r.data,ultimaData:r.data};
+      const geral=porEncObraDiscGeral[chaveGeral];
+      geral.horas+=r.horas; geral.rdos.add(r.nrdo);
+      if(r.data<geral.primeiraData) geral.primeiraData=r.data;
+      if(r.data>geral.ultimaData) geral.ultimaData=r.data;
+
+      // Agrupamento POR STATUS — usado só nas tabelas específicas de Em Andamento e
+      // Extra Escopo (cada uma filtra só o status dela, sem misturar com o resumo geral).
       const chaveCombo=r.encarregado+'|'+chaveObra+'|'+chaveDisc+'|'+r.status;
       if(!porEncObraDisc[chaveCombo]) porEncObraDisc[chaveCombo]={encarregado:r.encarregado,obra:r.obra,disc:nomeDiscCanonico,status:r.status,horas:0,rdos:new Set(),primeiraData:r.data,ultimaData:r.data};
       const combo=porEncObraDisc[chaveCombo];
@@ -7355,8 +7375,8 @@ async function exportarBackupCompletoExcel(btn){
           c.value=val;
           c.fill={type:'pattern',pattern:'solid',fgColor:{argb:li%2===0?'FFFFFFFF':'FFF5F7FA'}};
           c.border={bottom:{style:'thin',color:{argb:'FFEEEEEE'}}};
-          if(typeof val==='number'){ c.numFmt='0.0'; c.alignment={horizontal:'center'}; c.font={bold:true,size:10}; }
-          else{ c.font={size:10}; c.alignment={horizontal:'center',vertical:'middle'}; }
+          if(typeof val==='number'){ c.numFmt='0.0'; c.alignment={horizontal:'center',vertical:'middle'}; c.font={bold:true,size:10}; }
+          else{ c.font={size:10}; c.alignment={horizontal:'left',vertical:'middle',indent:1}; }
         });
         L++;
       });
@@ -7365,16 +7385,21 @@ async function exportarBackupCompletoExcel(btn){
 
     // Constrói as linhas de uma tabela Encarregado × Obra × Disciplina, com período,
     // opcionalmente filtrando por um status específico (Andamento, Extra Escopo, etc.)
+    function linhasComboGeral(){
+      return Object.values(porEncObraDiscGeral)
+        .sort((a,b)=> a.encarregado!==b.encarregado ? a.encarregado.localeCompare(b.encarregado) : b.horas-a.horas)
+        .map(c=>[c.encarregado,c.obra,c.disc,formatarDataBR(c.primeiraData),formatarDataBR(c.ultimaData),Number(c.horas.toFixed(1)),formatarListaRDOs(c.rdos)]);
+    }
     function linhasComboFiltrado(statusFiltro){
       return Object.values(porEncObraDisc)
-        .filter(c=>!statusFiltro||c.status===statusFiltro)
+        .filter(c=>c.status===statusFiltro)
         .sort((a,b)=> a.encarregado!==b.encarregado ? a.encarregado.localeCompare(b.encarregado) : b.horas-a.horas)
         .map(c=>[c.encarregado,c.obra,c.disc,formatarDataBR(c.primeiraData),formatarDataBR(c.ultimaData),Number(c.horas.toFixed(1)),formatarListaRDOs(c.rdos)]);
     }
     const colunasCombo=['Encarregado','Obra/Cliente','Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'];
     const largurasCombo=[22,24,16,13,13,14,32];
 
-    desenharTabela('👷 RESUMO GERAL — ENCARREGADO × OBRA × DISCIPLINA',   'FF9D174D',colunasCombo,linhasComboFiltrado(null),largurasCombo);
+    desenharTabela('👷 RESUMO GERAL — ENCARREGADO × OBRA × DISCIPLINA',   'FF9D174D',colunasCombo,linhasComboGeral(),largurasCombo);
     desenharTabela('🔵 RESUMO — EM ANDAMENTO (Encarregado × Obra × Disciplina)','FF1A52C8',colunasCombo,linhasComboFiltrado('and'),largurasCombo);
     desenharTabela('🟢 RESUMO — EXTRA ESCOPO (Encarregado × Obra × Disciplina)','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
 
@@ -7451,7 +7476,7 @@ async function exportarBackupCompletoExcel(btn){
         c.value=v;
         c.font={size:10};
         c.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFundo}};
-        c.alignment={vertical:'top',horizontal:(ci===6||ci===7?'left':'center'),wrapText:(ci===6||ci===7)};
+        c.alignment={vertical:'top',horizontal:(ci===8?'center':'left'),wrapText:(ci===6||ci===7),indent:(ci===8?0:1)};
         c.border={top:{style:'thin',color:{argb:'FFDDDDDD'}},bottom:{style:'thin',color:{argb:'FFDDDDDD'}},left:{style:'thin',color:{argb:'FFEEEEEE'}},right:{style:'thin',color:{argb:'FFEEEEEE'}}};
       });
       ws.getCell(L,2).font={bold:true,size:10};
