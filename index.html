@@ -7400,7 +7400,8 @@ async function exportarBackupCompletoExcel(btn){
     const largurasCombo=[22,24,16,13,13,14,32];
 
     desenharTabela('👷 RESUMO GERAL — ENCARREGADO × OBRA × DISCIPLINA',   'FF9D174D',colunasCombo,linhasComboGeral(),largurasCombo);
-    desenharTabela('🔵 RESUMO — EM ANDAMENTO (Encarregado × Obra × Disciplina)','FF1A52C8',colunasCombo,linhasComboFiltrado('and'),largurasCombo);
+    // Removida a tabela de "Resumo — Em Andamento" a pedido — o Resumo Geral já cobre
+    // isso, e ficava confuso ter as duas. O Extra Escopo continua, esse é essencial.
     desenharTabela('🟢 RESUMO — EXTRA ESCOPO (Encarregado × Obra × Disciplina)','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
 
     desenharTabela('🔧 RESUMO POR DISCIPLINA — TODOS OS ENCARREGADOS','FF6030BB',
