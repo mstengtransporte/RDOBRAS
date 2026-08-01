@@ -7363,6 +7363,24 @@ async function exportarBackupCompletoExcel(btn){
     desenharTabela('📊 HORAS POR OBRA × DISCIPLINA','FF1A52C8',['Obra',...listaDisciplinas],
       Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinasChaves.map(chaveDisc=>Number((linha[chaveDisc]||0).toFixed(1)))]));
 
+    // Tabelas específicas por status — mesma separação que já existe nos painéis
+    // 🔵 Andamento e 🟢 Extra Escopo do próprio app, agora também no backup.
+    function resumoPorObraFiltradoPorStatus(status){
+      const acumulado={};
+      registros.filter(r=>r.status===status).forEach(r=>{
+        const chave=normalizarObra(r.obra);
+        if(!acumulado[chave]) acumulado[chave]={nome:r.obra,horas:0,rdos:new Set()};
+        acumulado[chave].horas+=r.horas; acumulado[chave].rdos.add(r.nrdo+'|'+r.data);
+      });
+      return Object.values(acumulado).sort((a,b)=>b.horas-a.horas).map(o=>[o.nome,Number(o.horas.toFixed(1)),o.rdos.size]);
+    }
+
+    desenharTabela('🔵 RESUMO — EM ANDAMENTO (por Obra)','FF1A52C8',['Obra/Cliente','Total de Horas','Qtd. de RDOs'],
+      resumoPorObraFiltradoPorStatus('and'));
+
+    desenharTabela('🟢 RESUMO — EXTRA ESCOPO (por Obra)','FF158038',['Obra/Cliente','Total de Horas','Qtd. de RDOs'],
+      resumoPorObraFiltradoPorStatus('ext'));
+
     // ═══════════════════════════════════════════════════════════════════
     // DETALHAMENTO COMPLETO — uma linha por funcionário+atividade, ORDENADO
     // por Encarregado → Data → Obra → Nº RDO → OSE, com as colunas que se
@@ -7439,7 +7457,7 @@ async function exportarBackupCompletoExcel(btn){
     });
 
     ws.autoFilter={from:{row:headerRowNum,column:1},to:{row:headerRowNum,column:NUM_COLS_DETALHE}};
-    ws.views=[{state:'frozen',xSplit:2,ySplit:headerRowNum}];
+    // Sem congelar linha/coluna — a pessoa prefere rolar a página inteira livremente
     ws.getColumn(1).width=22; ws.getColumn(2).width=12; ws.getColumn(3).width=11; ws.getColumn(4).width=26;
     ws.getColumn(5).width=16; ws.getColumn(6).width=8; ws.getColumn(7).width=26; ws.getColumn(8).width=16;
     ws.getColumn(9).width=40; ws.getColumn(10).width=22; ws.getColumn(11).width=16; ws.getColumn(12).width=9;
