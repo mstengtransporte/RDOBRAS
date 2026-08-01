@@ -7423,40 +7423,40 @@ async function exportarBackupCompletoExcel(btn){
     const colunasCombo=['Encarregado','Obra/Cliente','Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'];
     const largurasCombo=[22,24,16,13,13,14,32];
 
-    // ── SEÇÃO 1: POR ENCARREGADO ──────────────────────────────────────
-    desenharTabela('👷 TOTAL DE HORAS POR ENCARREGADO — DETALHADO POR OBRA E DISCIPLINA','FF9D174D',colunasCombo,linhasComboGeral(),largurasCombo);
+    // Banner de seção — separa visualmente o que é "por obra" (local/regional) do que
+    // é "empresa toda" (consolidado/macro), pra nunca confundir os dois níveis.
+    function desenharDivisorDeSecao(titulo,corFundo){
+      ws.mergeCells(L,1,L+1,largura);
+      const c=ws.getCell(L,1);
+      c.value=titulo;
+      c.font={bold:true,size:14,color:{argb:'FFFFFFFF'}};
+      c.alignment={horizontal:'center',vertical:'middle'};
+      for(let r=L;r<=L+1;r++) for(let cc=1;cc<=largura;cc++) ws.getCell(r,cc).fill={type:'pattern',pattern:'solid',fgColor:{argb:corFundo}};
+      L+=3;
+    }
 
-    desenharTabela('👷 TOTAL DE HORAS POR ENCARREGADO — DETALHADO POR OBRA (VISÃO CRUZADA)','FF9D174D',['Obra',...listaEncarregados],
+    // ═══ PARTE 1 — INFORMAÇÕES LOCAIS E REGIONAIS (DENTRO DE CADA OBRA) ═══
+    // "Local" = uma obra específica sozinha. "Regional" = comparando várias obras lado a
+    // lado (visão cruzada), mas ainda mostrando cada obra separada, sem virar 1 número só.
+    desenharDivisorDeSecao('📍 PARTE 1 — INFORMAÇÕES POR OBRA (LOCAL E REGIONAL, OBRA POR OBRA)','FF1E3A5F');
+
+    desenharTabela('👷 TOTAL DE HORAS POR ENCARREGADO — DETALHADO POR OBRA E DISCIPLINA (LOCAL)','FF9D174D',colunasCombo,linhasComboGeral(),largurasCombo);
+
+    desenharTabela('👷 TOTAL DE HORAS POR ENCARREGADO — DETALHADO POR OBRA (REGIONAL, VISÃO CRUZADA)','FF9D174D',['Obra',...listaEncarregados],
       Object.values(obraEncMatriz).map(linha=>[linha.nomeObra,...listaEncarregados.map(enc=>Number((linha[enc]||0).toFixed(1)))]));
 
-    desenharTabela('👷 TOTAL CONSOLIDADO DE HORAS POR ENCARREGADO — TODAS AS OBRAS DA EMPRESA','FF9D174D',
-      ['Encarregado','Primeira Data','Última Data','Total de Horas','Obras Diferentes','Qtd. e Números dos RDOs'],
-      Object.entries(porEncGeral).sort((a,b)=>b[1].horas-a[1].horas).map(([nome,info])=>
-        [nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),info.obras.size,formatarListaRDOs(info.rdos)]),
-      [22,13,13,14,14,32]);
-
-    // ── SEÇÃO 2: POR DISCIPLINA ────────────────────────────────────────
-    desenharTabela('🔧 TOTAL DE HORAS POR DISCIPLINA — DETALHADO POR OBRA (VISÃO CRUZADA)','FF1A52C8',['Obra',...listaDisciplinas],
+    desenharTabela('🔧 TOTAL DE HORAS POR DISCIPLINA — DETALHADO POR OBRA (REGIONAL, VISÃO CRUZADA)','FF1A52C8',['Obra',...listaDisciplinas],
       Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinasChaves.map(chaveDisc=>Number((linha[chaveDisc]||0).toFixed(1)))]));
 
-    desenharTabela('🔧 TOTAL CONSOLIDADO POR DISCIPLINA — TODAS AS OBRAS DA EMPRESA','FF6030BB',
-      ['Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'],
-      Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),formatarListaRDOs(info.rdos)]),
-      [18,13,13,14,32]);
-
-    // ── SEÇÃO 3: POR OBRA ───────────────────────────────────────────────
-    desenharTabela('🏭 TOTAL GERAL DA OBRA — TODAS AS DISCIPLINAS SOMADAS','FFC2410C',
+    desenharTabela('🏭 TOTAL GERAL DA OBRA — TODAS AS DISCIPLINAS SOMADAS (LOCAL)','FFC2410C',
       ['Obra/Cliente','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'],
       Object.values(porObraGeral).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),formatarListaRDOs(info.rdos)]),
       [24,13,13,14,32]);
 
-    // ── SEÇÃO 4: EXTRA ESCOPO (verde é sempre e só Extra Escopo) ────────
-    desenharTabela('🟢 TOTAL DE HORAS EXTRAS (EXTRA ESCOPO / ADICIONAL) — POR OBRA','FF158038',
+    desenharTabela('🟢 TOTAL DE HORAS EXTRAS (EXTRA ESCOPO / ADICIONAL) — POR OBRA (LOCAL)','FF158038',
       ['Obra/Cliente','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'],
       Object.values(porExtraObra).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),formatarListaRDOs(info.rdos)]),
       [24,13,13,14,32]);
-
-    desenharTabela('🟢 TOTAL CONSOLIDADO DE EXTRA ESCOPO / ADICIONAL — TODAS AS OBRAS DA EMPRESA','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
 
     // ═══════════════════════════════════════════════════════════════════
     // DETALHAMENTO COMPLETO — UMA LINHA POR DIA DE TRABALHO DE CADA PESSOA
@@ -7539,6 +7539,24 @@ async function exportarBackupCompletoExcel(btn){
     ws.getColumn(5).width=16; ws.getColumn(6).width=20; ws.getColumn(7).width=55; ws.getColumn(8).width=45; ws.getColumn(9).width=11;
     for(let c=10;c<=largura;c++) ws.getColumn(c).width=16;
     L+=2;
+
+    // ═══ PARTE 2 — CONSOLIDADO DA EMPRESA (TODAS AS OBRAS SOMADAS) ═══
+    // A partir daqui, tudo é visão macro — números que já não representam mais UMA obra
+    // sozinha, e sim a empresa inteira, todas as obras somadas de uma vez.
+    desenharDivisorDeSecao('🌍 PARTE 2 — CONSOLIDADO DA EMPRESA (TODAS AS OBRAS SOMADAS)','FF6B2D0A');
+
+    desenharTabela('👷 TOTAL CONSOLIDADO DE HORAS POR ENCARREGADO — TODAS AS OBRAS DA EMPRESA','FF9D174D',
+      ['Encarregado','Primeira Data','Última Data','Total de Horas','Obras Diferentes','Qtd. e Números dos RDOs'],
+      Object.entries(porEncGeral).sort((a,b)=>b[1].horas-a[1].horas).map(([nome,info])=>
+        [nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),info.obras.size,formatarListaRDOs(info.rdos)]),
+      [22,13,13,14,14,32]);
+
+    desenharTabela('🔧 TOTAL CONSOLIDADO POR DISCIPLINA — TODAS AS OBRAS DA EMPRESA','FF6030BB',
+      ['Disciplina','Primeira Data','Última Data','Total de Horas','Qtd. e Números dos RDOs'],
+      Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,formatarDataBR(info.primeiraData),formatarDataBR(info.ultimaData),Number(info.horas.toFixed(1)),formatarListaRDOs(info.rdos)]),
+      [18,13,13,14,32]);
+
+    desenharTabela('🟢 TOTAL CONSOLIDADO DE EXTRA ESCOPO / ADICIONAL — TODAS AS OBRAS DA EMPRESA','FF158038',colunasCombo,linhasComboFiltrado('ext'),largurasCombo);
 
     // ═══════════════════════════════════════════════════════════════════
     // FECHAMENTO — o número final de tudo, sempre por último, depois de já
