@@ -7212,7 +7212,7 @@ function coletarTodosOsRegistrosFlat(){
       if(!o.status||o.status==='sem') return;
       const descTexto=(o.desc||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim()||'—';
       const base={
-        data:h.data,nrdo:h.nrdo||'—',obra:h.obra||'—',disc:h.disc||'(SEM DISCIPLINA)',
+        data:h.data,nrdo:h.nrdo||'—',obra:h.obra||'—',disc:(h.disc||'(SEM DISCIPLINA)').trim().toUpperCase(),
         encarregado:h.enc||'—',oseNumero:idx+1,nomeProjeto:(o.name||'—').toUpperCase(),
         status:o.status,descricao:descTexto.toUpperCase()
       };
@@ -7253,7 +7253,8 @@ async function exportarBackupCompletoExcel(btn){
     // ── Agregações usadas nas tabelas de resumo ──
     const porObra={},porEnc={},porDisc={};
     const obraEncMatriz={},obraDiscMatriz={};
-    const nomesEncarregados=new Set(),nomesDisciplinas=new Set();
+    const nomesEncarregados=new Set();
+    const nomesDisciplinasPorChave={}; // chave normalizada → nome de exibição (primeira ocorrência)
     registros.forEach(r=>{
       const chaveObra=normalizarObra(r.obra);
       if(!porObra[chaveObra]) porObra[chaveObra]={nome:r.obra,horas:0,rdos:new Set()};
@@ -7263,18 +7264,24 @@ async function exportarBackupCompletoExcel(btn){
       porEnc[r.encarregado].horas+=r.horas; porEnc[r.encarregado].rdos.add(r.nrdo+'|'+r.data); porEnc[r.encarregado].obras.add(chaveObra);
       nomesEncarregados.add(r.encarregado);
 
-      if(!porDisc[r.disc]) porDisc[r.disc]={horas:0,rdos:new Set()};
-      porDisc[r.disc].horas+=r.horas; porDisc[r.disc].rdos.add(r.nrdo+'|'+r.data);
-      nomesDisciplinas.add(r.disc);
+      // Disciplina também precisa de comparação tolerante — sem isso, "Mecânica" (RDO
+      // antigo, digitado livre) e "MECÂNICA" (cadastro novo, lista fixa) contavam como
+      // duas disciplinas diferentes, duplicando o resumo.
+      const chaveDisc=normalizarObra(r.disc);
+      if(!nomesDisciplinasPorChave[chaveDisc]) nomesDisciplinasPorChave[chaveDisc]=r.disc;
+      const nomeDiscCanonico=nomesDisciplinasPorChave[chaveDisc];
+      if(!porDisc[chaveDisc]) porDisc[chaveDisc]={nome:nomeDiscCanonico,horas:0,rdos:new Set()};
+      porDisc[chaveDisc].horas+=r.horas; porDisc[chaveDisc].rdos.add(r.nrdo+'|'+r.data);
 
       if(!obraEncMatriz[chaveObra]) obraEncMatriz[chaveObra]={nomeObra:r.obra};
       obraEncMatriz[chaveObra][r.encarregado]=(obraEncMatriz[chaveObra][r.encarregado]||0)+r.horas;
 
       if(!obraDiscMatriz[chaveObra]) obraDiscMatriz[chaveObra]={nomeObra:r.obra};
-      obraDiscMatriz[chaveObra][r.disc]=(obraDiscMatriz[chaveObra][r.disc]||0)+r.horas;
+      obraDiscMatriz[chaveObra][chaveDisc]=(obraDiscMatriz[chaveObra][chaveDisc]||0)+r.horas;
     });
     const listaEncarregados=[...nomesEncarregados].sort();
-    const listaDisciplinas=[...nomesDisciplinas].sort();
+    const listaDisciplinasChaves=Object.keys(nomesDisciplinasPorChave).sort();
+    const listaDisciplinas=listaDisciplinasChaves.map(ch=>nomesDisciplinasPorChave[ch]); // nomes bonitos, na mesma ordem das chaves
 
     const NUM_COLS_DETALHE=12;
     const largura=Math.max(NUM_COLS_DETALHE,listaEncarregados.length+2,listaDisciplinas.length+2);
@@ -7348,13 +7355,13 @@ async function exportarBackupCompletoExcel(btn){
       Object.entries(porEnc).sort((a,b)=>b[1].horas-a[1].horas).map(([nome,info])=>[nome,Number(info.horas.toFixed(1)),info.rdos.size,info.obras.size]));
 
     desenharTabela('🔧 RESUMO POR DISCIPLINA','FF6030BB',['Disciplina','Total de Horas','Qtd. de RDOs'],
-      Object.entries(porDisc).sort((a,b)=>b[1].horas-a[1].horas).map(([nome,info])=>[nome,Number(info.horas.toFixed(1)),info.rdos.size]));
+      Object.values(porDisc).sort((a,b)=>b.horas-a.horas).map(info=>[info.nome,Number(info.horas.toFixed(1)),info.rdos.size]));
 
     desenharTabela('📊 HORAS POR OBRA × ENCARREGADO','FF158038',['Obra',...listaEncarregados],
       Object.values(obraEncMatriz).map(linha=>[linha.nomeObra,...listaEncarregados.map(enc=>Number((linha[enc]||0).toFixed(1)))]));
 
     desenharTabela('📊 HORAS POR OBRA × DISCIPLINA','FF1A52C8',['Obra',...listaDisciplinas],
-      Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinas.map(disc=>Number((linha[disc]||0).toFixed(1)))]));
+      Object.values(obraDiscMatriz).map(linha=>[linha.nomeObra,...listaDisciplinasChaves.map(chaveDisc=>Number((linha[chaveDisc]||0).toFixed(1)))]));
 
     // ═══════════════════════════════════════════════════════════════════
     // DETALHAMENTO COMPLETO — uma linha por funcionário+atividade, ORDENADO
@@ -7396,19 +7403,27 @@ async function exportarBackupCompletoExcel(btn){
       return a.oseNumero-b.oseNumero;
     });
 
-    // Colunas 1-5 (Encarregado, Data, Nº RDO, Obra, Disciplina) mesclam quando o
-    // valor se repete na linha seguinte — evita repetir a mesma informação várias
-    // vezes seguidas, sem esconder nem uma linha de dado real.
-    const colsParaMesclar=[1,2,3,4,5];
-    let inicioBloco={1:L,2:L,3:L,4:L,5:L};
+    // Cada linha SEMPRE mostra todos os seus dados (data incluída) — nada de célula
+    // mesclada, que no celular pode parecer "sumida" quando a linha de cima (onde o
+    // valor realmente está) já rolou pra fora da tela. Pra ainda dar pra enxergar o
+    // agrupamento por RDO, uso faixas de cor alternadas: toda vez que muda de RDO, a
+    // cor de fundo alterna — fica claro onde um RDO termina e o outro começa, sem
+    // esconder nenhum dado.
+    let corFaixaAtual=true;
+    let grupoAnteriorChave=null;
 
-    registros.forEach((r,idx)=>{
+    registros.forEach((r)=>{
+      const grupoChave=r.encarregado+'|'+r.data+'|'+r.nrdo+'|'+normalizarObra(r.obra);
+      if(grupoChave!==grupoAnteriorChave){ corFaixaAtual=!corFaixaAtual; grupoAnteriorChave=grupoChave; }
+      const corFundo=corFaixaAtual?'FFFFFFFF':'FFEDF1F8';
+
       const infoStatus=STATUS_INFO_EXCEL[r.status]||{nome:r.status.toUpperCase(),cor:'FF888888'};
       const linha=[r.encarregado,formatarDataBR(r.data),r.nrdo,r.obra,r.disc,r.oseNumero,r.nomeProjeto,infoStatus.nome,r.descricao,r.funcionario,r.funcao,r.horas];
       linha.forEach((v,ci)=>{
         const c=ws.getCell(L,ci+1);
         c.value=v;
         c.font={size:10};
+        c.fill={type:'pattern',pattern:'solid',fgColor:{argb:corFundo}};
         c.alignment={vertical:'middle',horizontal:(ci===8?'left':'center'),wrapText:ci===8};
         c.border={top:{style:'thin',color:{argb:'FFDDDDDD'}},bottom:{style:'thin',color:{argb:'FFDDDDDD'}},left:{style:'thin',color:{argb:'FFEEEEEE'}},right:{style:'thin',color:{argb:'FFEEEEEE'}}};
       });
@@ -7416,27 +7431,15 @@ async function exportarBackupCompletoExcel(btn){
       statusCell.font={bold:true,color:{argb:'FFFFFFFF'},size:9.5};
       statusCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:infoStatus.cor}};
       statusCell.alignment={horizontal:'center',vertical:'middle'};
+      ws.getCell(L,2).font={bold:true,size:10}; // data em negrito — sempre visível, nunca escondida
       ws.getCell(L,12).numFmt='0.0';
       ws.getCell(L,12).font={bold:true,size:10.5};
       ws.getCell(L,1).font={bold:true,size:10};
-
-      // Mescla as colunas-chave quando o próximo registro repete o mesmo grupo
-      const proximo=registros[idx+1];
-      const chaveAtualPorCol={1:r.encarregado,2:formatarDataBR(r.data),3:r.nrdo,4:r.obra,5:r.disc};
-      const chaveProximaPorCol=proximo?{1:proximo.encarregado,2:formatarDataBR(proximo.data),3:proximo.nrdo,4:proximo.obra,5:proximo.disc}:null;
-      colsParaMesclar.forEach(col=>{
-        const mudou=!chaveProximaPorCol||chaveAtualPorCol[col]!==chaveProximaPorCol[col]||
-          (col>1&&colsParaMesclar.slice(0,col-1).some(c2=>chaveAtualPorCol[c2]!==chaveProximaPorCol[c2]));
-        if(mudou){
-          if(inicioBloco[col]<L) ws.mergeCells(inicioBloco[col],col,L,col);
-          inicioBloco[col]=L+1;
-        }
-      });
       L++;
     });
 
     ws.autoFilter={from:{row:headerRowNum,column:1},to:{row:headerRowNum,column:NUM_COLS_DETALHE}};
-    ws.views=[{state:'frozen',ySplit:headerRowNum}];
+    ws.views=[{state:'frozen',xSplit:2,ySplit:headerRowNum}];
     ws.getColumn(1).width=22; ws.getColumn(2).width=12; ws.getColumn(3).width=11; ws.getColumn(4).width=26;
     ws.getColumn(5).width=16; ws.getColumn(6).width=8; ws.getColumn(7).width=26; ws.getColumn(8).width=16;
     ws.getColumn(9).width=40; ws.getColumn(10).width=22; ws.getColumn(11).width=16; ws.getColumn(12).width=9;
