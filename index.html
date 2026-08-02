@@ -120,11 +120,19 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
 .btn:hover{filter:brightness(1.2);transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.35)}
 .btn:active{transform:translateY(0);filter:brightness(.9)}
 .btn-save{background:#158038;color:#fff;border-color:#0d5228}
-@keyframes piscarPendente{
-  0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.8);background:#dc2626;border-color:#8a1010}
-  50%{box-shadow:0 0 0 8px rgba(220,38,38,0);background:#ef4444;border-color:#dc2626}
+@keyframes piscarFaixaPendente{
+  0%,100%{background:#dc2626}
+  50%{background:#f59e0b}
 }
-.btn-save.pendente{animation:piscarPendente 1.2s ease-in-out infinite}
+#aviso-rdo-pendente{
+  display:none;
+  animation:piscarFaixaPendente .9s ease-in-out infinite;
+  color:#fff;font-weight:900;text-align:center;
+  padding:10px 12px;font-size:13px;letter-spacing:.3px;
+  border-top:2px solid rgba(255,255,255,.4);border-bottom:2px solid rgba(255,255,255,.4);
+  text-transform:uppercase
+}
+#aviso-rdo-pendente.show{display:block}
 .btn-search{background:#4030c0;color:#fff;border-color:#2818a0}
 .btn-new{background:#c07010;color:#fff;border-color:#8a4e08}
 .btn-pdf{background:#6030bb;color:#fff;border-color:#4020a0}
@@ -1427,7 +1435,7 @@ input.login-input,
     <button class="btn admin-only-btn" style="background:#1a52c8;color:#fff" onclick="abrirAndamento()" title="Controle consolidado de horas por projeto (Em Andamento)">🔵 <span>Andamento</span></button>
     <button class="btn admin-only-btn" style="background:#c2410c;color:#fff" onclick="abrirProjetos()" title="Total de horas de cada projeto, do início até a conclusão, em qualquer status">📁 <span>Horas/Projeto</span></button>
     <span class="topbar-divider"></span>
-    <button class="btn btn-save" id="btn-salvar-enviar"    onclick="salvarRDO()" title="Salva neste aparelho E envia pro admin"><span id="icone-salvar">💾</span> <span id="label-salvar">Salvar e Enviar</span></button>
+    <button class="btn btn-save"    onclick="salvarRDO()" title="Salva neste aparelho E envia pro admin">💾 <span>Salvar e Enviar</span></button>
     <button class="btn" style="background:#d97706;color:#fff" onclick="verificarEReenviarPendentes()" title="Confere se algum RDO seu ficou só neste aparelho sem chegar no admin, e reenvia">🔄 <span>Reenviar</span></button>
     <button class="btn admin-only-btn" style="background:#0a6080;color:#fff" onclick="abrirGerenciarClientes()" title="Adicionar/remover clientes da lista de Obra/Projeto">👥 <span>Clientes</span></button>
     <button class="btn" id="btn-desfazer" style="background:#7c5a00;color:#fff" onclick="desfazerUltimaAcao()" title="Desfazer: volta ao estado de antes da última ação (excluir funcionário, criar novo RDO)">↩️ <span>Desfazer</span></button>
@@ -1441,6 +1449,7 @@ input.login-input,
     <button class="btn btn-pdf"     onclick="exportarPDF()" title="Abre a tela de impressão para salvar como PDF">🖨️ <span>PDF</span></button>
     <button class="btn btn-xlsx"    onclick="exportarXLSX()">📗 <span>Excel</span></button>
   </div>
+  <div id="aviso-rdo-pendente" onclick="salvarRDO()" style="cursor:pointer"></div>
 </div>
 
 <div class="page" id="rdo-page">
@@ -2844,10 +2853,8 @@ function estaEnviado(key){
 // pra nunca passar despercebido que ainda falta apertar. Roda depois de cada autosave,
 // depois de enviar, depois de apagar — sempre que algo pode ter mudado a situação.
 function atualizarAvisoRDOsPendentes(){
-  const btn=document.getElementById('btn-salvar-enviar');
-  const label=document.getElementById('label-salvar');
-  const icone=document.getElementById('icone-salvar');
-  if(!btn||!label) return;
+  const faixa=document.getElementById('aviso-rdo-pendente');
+  if(!faixa) return;
   let pendentes=0;
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
@@ -2859,14 +2866,14 @@ function atualizarAvisoRDOsPendentes(){
     }catch(e){}
   }
   if(pendentes>0){
-    btn.classList.add('pendente');
-    label.textContent=`Enviar Agora! (${pendentes} pendente${pendentes>1?'s':''})`;
-    if(icone) icone.textContent='⚠️';
+    faixa.textContent=`⚠️ ATENÇÃO: VOCÊ TEM ${pendentes} RDO${pendentes>1?'S':''} NÃO ENVIADO${pendentes>1?'S':''} AO ADMIN! TOQUE AQUI PRA ENVIAR AGORA ⚠️`;
+    faixa.classList.add('show');
   }else{
-    btn.classList.remove('pendente');
-    label.textContent='Salvar e Enviar';
-    if(icone) icone.textContent='💾';
+    faixa.classList.remove('show');
   }
+  // O tamanho da barra de cima muda quando a faixa aparece/some — recalcula o espaço
+  // reservado no topo da página, senão o conteúdo fica escondido atrás dela.
+  if(typeof ajustarEspacoTopoTopbar==='function') ajustarEspacoTopoTopbar();
 }
 
 // Status das OSEs (índice 1..6)
