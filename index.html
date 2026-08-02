@@ -4584,11 +4584,17 @@ function _criarRDOEmBranco(mensagemToast,focarObra){
 }
 
 // ── PDF ──
-function getPdfFilename(){
+// Monta o nome do arquivo sempre com a DATA DO PRÓPRIO DOCUMENTO (não do momento em que
+// está sendo exportado/enviado) — importante porque a pessoa pode gerar/mandar o arquivo
+// de um RDO de ontem hoje, e o nome tem que refletir a data real do trabalho, não a data
+// de agora, senão confunde quem recebe. Usado tanto pelo PDF quanto pelo Excel, garantindo
+// o mesmo padrão de nome nos dois: SEGUE_RDO_DIA-DA-SEMANA_DD-MM-AAAA_OBRA.extensao
+function getNomeArquivoRDO(extensao){
   const d=getFormData(); const h=d.header;
   const obra=(h.obra||'OBRA').toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
   const dia=(document.getElementById('h-dia')?.value||'').toUpperCase().replace(/[^A-Z]+/g,'_').replace(/^_|_$/g,'');
-  // Formata a data como DD-MM-YYYY para leitura fácil no nome do arquivo
+  // Formata a data como DD-MM-YYYY para leitura fácil no nome do arquivo — sempre a data
+  // que está gravada NESTE RDO especificamente (h.data), nunca a data do relógio agora.
   let dataFormatada='';
   if(h.data){
     const [y,m,dd]=h.data.split('-');
@@ -4597,8 +4603,11 @@ function getPdfFilename(){
     const t=new Date();
     dataFormatada=`${String(t.getDate()).padStart(2,'0')}-${String(t.getMonth()+1).padStart(2,'0')}-${t.getFullYear()}`;
   }
-  // Formato: SEGUE_RDO_QUARTA-FEIRA_01-07-2026_NOME_DA_OBRA.pdf
-  return `SEGUE_RDO_${dia}_${dataFormatada}_${obra}.pdf`;
+  return `SEGUE_RDO_${dia}_${dataFormatada}_${obra}.${extensao}`;
+}
+
+function getPdfFilename(){
+  return getNomeArquivoRDO('pdf');
 }
 
 function exportarPDF(){
@@ -5437,9 +5446,7 @@ async function exportarXLSX(){
   const blob=new Blob([buffer],{type:'application/octet-stream'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  const obra=(h.obra||'OBRA').replace(/\s+/g,'_');
-  const data=h.data||hojeLocal();
-  a.href=url; a.download=`RDO_${obra}_${data}.xlsx`; a.click();
+  a.href=url; a.download=getNomeArquivoRDO('xlsx'); a.click();
   setTimeout(()=>URL.revokeObjectURL(url),3000);
   showToast('📗 Excel (.xlsx) exportado com cores!','#1d6f42');
 }
