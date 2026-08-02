@@ -2857,9 +2857,19 @@ function estaEnviado(key){
 // NÃO foi enviado pro admin — se tiver, faz o botão "Salvar e Enviar" PISCAR em vermelho,
 // pra nunca passar despercebido que ainda falta apertar. Roda depois de cada autosave,
 // depois de enviar, depois de apagar — sempre que algo pode ter mudado a situação.
-function atualizarAvisoRDOsPendentes(){
+let _ultimaVerificacaoPendentes=0;
+function atualizarAvisoRDOsPendentes(forcar=false){
   const faixa=document.getElementById('aviso-rdo-pendente');
   if(!faixa) return;
+  // A varredura completa (looping em TUDO que está salvo no aparelho) é a parte cara
+  // dessa função — sem essa trava, ela rodava de novo a cada poucos segundos enquanto
+  // a pessoa digita (o autosave chama isso toda vez), pesando mais quanto mais RDO
+  // acumulado tiver no aparelho ao longo dos meses. Limitando pra no máximo 1 vez a
+  // cada 5 segundos, sem perder a utilidade do aviso.
+  const agora=Date.now();
+  if(!forcar&&agora-_ultimaVerificacaoPendentes<5000) return;
+  _ultimaVerificacaoPendentes=agora;
+
   let pendentes=0;
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
@@ -2953,7 +2963,7 @@ async function verificarEReenviarPendentes(){
       }catch(e){ falha++; }
     }
     showToast(`✓ ${sucesso} RDO(s) reenviado(s) com sucesso${falha?` — ${falha} ainda falharam, tente de novo`:''}.`,falha?'#d97706':'#16a34a');
-    atualizarAvisoRDOsPendentes();
+    atualizarAvisoRDOsPendentes(true);
   }catch(e){
     console.error('verificarEReenviarPendentes error:',e);
     showToast('Erro ao conferir pendências.','#dc2626');
@@ -3011,17 +3021,19 @@ function iniciarAppAposLogin(){
   atualizarBannerObra();
   ajustarTextareasAuto();
   initAutoSave();
-  atualizarDatalistNomesProjetos();
-  atualizarAvisoRDOsPendentes();
+  atualizarAvisoRDOsPendentes(true); // esse sim é urgente — a pessoa precisa ver na hora se tem RDO pendente
   // Reconfere a cada 60s — pega o caso de alguém deixar o app aberto sem mexer em nada,
   // mesmo assim continua avisando que tem RDO parado esperando ser enviado.
   clearInterval(window._intervalAvisoPendentes);
   window._intervalAvisoPendentes=setInterval(atualizarAvisoRDOsPendentes,60000);
-  // As buscas abaixo não são urgentes pra tela aparecer (lista de clientes/encarregados
-  // pros campos de escolha, e a checagem de RDO apagado pelo admin) — adiadas pra rodar
-  // só depois que o RDO já está montado e visível na tela, assim a pessoa não fica
-  // esperando a rede pra começar a usar o app.
+  // As tarefas abaixo não são urgentes pra tela aparecer pronta: lista de nomes de
+  // projeto (sugestão de autocompletar), clientes/encarregados pros campos de escolha,
+  // e a checagem de RDO apagado pelo admin — todas fazem uma varredura de tudo que está
+  // salvo no aparelho, que só fica mais pesada quanto mais RDO for se acumulando com o
+  // tempo. Adiadas pra rodar só depois que o RDO já está montado e visível na tela,
+  // assim a pessoa não fica esperando isso pra começar a usar o app.
   setTimeout(()=>{
+    atualizarDatalistNomesProjetos();
     carregarClientes();
     carregarEncarregados();
     reconciliarRDOsApagadosPeloAdmin();
@@ -4089,7 +4101,7 @@ async function salvarRDO(){
       alert(`⚠️ O RDO foi salvo NESTE APARELHO, mas NÃO FOI ENVIADO ao admin.\n\nMotivo: ${motivo}\n\nConfira sua internet e clique em "Salvar e Enviar" de novo. Seus dados não foram perdidos, só ainda não chegaram na nuvem.`);
       showToast('⚠️ Salvo local, mas NÃO enviado — confira sua internet e tente de novo.','#dc2626');
     }
-    atualizarAvisoRDOsPendentes();
+    atualizarAvisoRDOsPendentes(true);
     // Reescanear todo o histórico pra atualizar sugestões de nome de projeto pode ficar
     // pesado com muitos RDOs salvos (meses/anos de uso). Adiado pro próximo tick pra não
     // atrasar nem por um instante o retorno visual de "salvo" pro usuário.
