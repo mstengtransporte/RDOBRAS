@@ -2065,16 +2065,16 @@ async function fazerLogin(){
     await carregarPerfilUsuario(loginData?.user);
 
     // Proteção contra "sujeira" de outro login no mesmo aparelho: se já tinha RDOs
-    // salvos localmente de uma conta DIFERENTE da que acabou de entrar, avisa e
-    // oferece limpar — sem isso, dados de um encarregado podiam aparecer misturados
-    // com os de outro só por terem usado o mesmo computador/navegador antes.
+    // salvos localmente de uma conta DIFERENTE da que acabou de entrar, limpa
+    // automaticamente — sem isso, dados de um encarregado podiam aparecer misturados
+    // com os de outro só por terem usado o mesmo computador/navegador antes. Deixou de
+    // ser uma pergunta opcional: dado de outra conta neste aparelho nunca é necessário
+    // (os dados continuam seguros na nuvem, de quem os criou).
     const ultimoUsuarioId=localStorage.getItem('rdo-ultimo-usuario-id');
     const temRdosLocais=Object.keys(localStorage).some(k=>k.startsWith('rdo-')&&!CHAVES_META_BACKUP.includes(k));
     if(usuarioAtual&&ultimoUsuarioId&&ultimoUsuarioId!==usuarioAtual.id&&temRdosLocais){
-      const limpar=confirm('Este aparelho tem RDOs salvos localmente de OUTRO login anterior. Pra não misturar com a conta de agora, recomendo limpar esses dados antigos deste aparelho (eles continuam seguros na nuvem, de quem os criou).\n\nLimpar os dados antigos deste aparelho agora?');
-      if(limpar){
-        Object.keys(localStorage).filter(k=>k.startsWith('rdo-')&&!CHAVES_META_BACKUP.includes(k)).forEach(k=>localStorage.removeItem(k));
-      }
+      Object.keys(localStorage).filter(k=>k.startsWith('rdo-')&&!CHAVES_META_BACKUP.includes(k)).forEach(k=>localStorage.removeItem(k));
+      showToast('🧹 Dados de um login anterior neste aparelho foram limpos por segurança.','#d97706');
     }
     if(usuarioAtual) localStorage.setItem('rdo-ultimo-usuario-id',usuarioAtual.id);
 
@@ -4338,8 +4338,13 @@ function aplicarModeloNovoDia(d,proximoNRDO,manterStatus=true,dataAlvo=null,mant
   document.getElementById('h-data').value=dataAlvo||hojeLocal();
   updateDiaSemana();
   if(h.obra) setObraSelecionada(h.obra);
-  if(h.enc)  setEncarregadoSelecionado(h.enc);
+  popularSelectEncarregado(); // sempre o nome de quem está logado — nunca depende do modelo
   if(h.disc) setDiscSelecionada(h.disc);
+
+  // Reconstrói os cards das OSEs do zero (volta a mostrar só 1, cores limpas) antes de
+  // aplicar os dados do modelo — evita qualquer resquício visual (cor, card revelado)
+  // ficando preso de um RDO anterior.
+  buildOSECards();
 
   if(d.oses){
     d.oses.forEach((o,idx)=>{
@@ -4556,6 +4561,7 @@ function _criarRDOEmBranco(mensagemToast,focarObra){
   rdoAtualId=gerarRdoId(); // identidade própria — nunca sobrescreve outro RDO já salvo
   localStorage.removeItem('rdo-last-key');
   ['h-obra','h-enc','h-disc'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  popularSelectEncarregado(); // sempre o nome de quem está logado, mesmo depois de limpar o campo
   document.getElementById('h-data').value=novaData;
   updateDiaSemana();
   // Obra ainda não foi preenchida aqui — a sequência começa no grupo "sem obra" e se
@@ -5833,6 +5839,8 @@ function buscarRDOs(){
   const countEl=document.getElementById('search-count');
 
   const resultados=[];
+  const ehAdmin=usuarioAtual&&usuarioAtual.papel==='admin_mestre';
+  const meuNomeNormalizado=usuarioAtual?normalizarObra(usuarioAtual.nome):null;
   keys.forEach(k=>{
     try{
       if(!estaEnviado(k)) return; // rascunho ainda não enviado — não aparece na busca
@@ -5840,6 +5848,11 @@ function buscarRDOs(){
       if(!raw)return;
       const d=JSON.parse(raw);
       const h=d.header||{};
+      // TRAVA DE SEGURANÇA: encarregado (não-admin) só pode ver os PRÓPRIOS RDOs — nunca
+      // de outra pessoa, mesmo que por algum motivo tenha ficado dado de outra conta
+      // salvo neste mesmo aparelho (ex: computador compartilhado). O admin continua
+      // vendo todos, normalmente.
+      if(!ehAdmin&&meuNomeNormalizado&&normalizarObra(h.enc)!==meuNomeNormalizado) return;
       const data=h.data||'';
       // Filtro por data
       if(de&&data&&data<de)return;
