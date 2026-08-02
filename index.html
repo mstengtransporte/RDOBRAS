@@ -1725,10 +1725,10 @@ input.login-input,
       <div>
         <label>Qual dia?</label>
         <div style="display:flex;gap:8px">
-          <button type="button" id="btn-novo-dia-seguinte" class="novo-rdo-dia-btn ativo" onclick="selecionarDiaNovoRDO('seguinte')">
+          <button type="button" id="btn-novo-dia-seguinte" class="novo-rdo-dia-btn" onclick="selecionarDiaNovoRDO('seguinte')">
             📅 PRÓXIMO DIA<br><span style="font-size:10px;font-weight:600;opacity:.85">Segue pro dia depois de hoje</span>
           </button>
-          <button type="button" id="btn-novo-dia-mesmo" class="novo-rdo-dia-btn" onclick="selecionarDiaNovoRDO('mesmo')">
+          <button type="button" id="btn-novo-dia-mesmo" class="novo-rdo-dia-btn ativo" onclick="selecionarDiaNovoRDO('mesmo')">
             📌 MESMO DIA<br><span style="font-size:10px;font-weight:600;opacity:.85">Outra obra/equipe, data igual</span>
           </button>
         </div>
@@ -2248,6 +2248,11 @@ function onMudarClienteSelecionado(){
     }
   }
   atualizarBannerObra();
+  // Atualiza o aviso de "não enviado" na hora — sem esperar os 4s do autosave, senão a
+  // faixa continuava piscando por alguns segundos mesmo depois de já ter voltado pra
+  // "Selecione" (campo Obra vazio não conta mais como pendente). autoSilentSave já
+  // chama atualizarAvisoRDOsPendentes() sozinho no final.
+  autoSilentSave();
 }
 
 // ── PAINEL DO ADMIN: gerenciar clientes ──
@@ -4388,7 +4393,7 @@ function aplicarModeloNovoDia(d,proximoNRDO,manterStatus=true,dataAlvo=null,mant
 
 // 'seguinte' = soma 1 dia à data atual do formulário (padrão, comportamento de sempre)
 // 'mesmo'    = mantém exatamente a mesma data (outro RDO do mesmo dia, outra obra/equipe)
-let novoRdoDiaEscolhido='seguinte';
+let novoRdoDiaEscolhido='mesmo';
 function selecionarDiaNovoRDO(tipo){
   novoRdoDiaEscolhido=tipo;
   const bs=document.getElementById('btn-novo-dia-seguinte'), bm=document.getElementById('btn-novo-dia-mesmo');
@@ -4412,7 +4417,7 @@ function novoRDO(){
   const lastRaw=lastKey?localStorage.getItem(lastKey):null;
   const aviso=document.getElementById('novo-rdo-aviso');
   if(aviso) aviso.style.display=lastRaw?'block':'none';
-  selecionarDiaNovoRDO('seguinte'); // reabre sempre no padrão — escolha manual a cada vez
+  selecionarDiaNovoRDO('mesmo'); // padrão agora é o mesmo dia — escolha manual a cada vez, se quiser mudar
   const radioUltimo=document.querySelector('input[name="novo-rdo-tipo"][value="ultimo"]');
   if(radioUltimo) radioUltimo.checked=true; // reabre sempre com a opção padrão marcada
   document.getElementById('novo-rdo-modal').classList.add('show');
