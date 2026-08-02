@@ -4610,6 +4610,19 @@ function getPdfFilename(){
   return getNomeArquivoRDO('pdf');
 }
 
+// Nome do arquivo do BACKUP COMPLETO — diferente do RDO individual, aqui a data que
+// importa é QUANDO O BACKUP FOI TIRADO (hoje, agora), não a data de nenhum RDO
+// específico — já que o backup junta muitos RDOs de datas diferentes. Isso ajuda quem
+// controla o arquivo a saber "até que dia eu já baixei tudo", pra saber o que falta
+// complementar no próximo backup, contando a partir dessa data em diante.
+function getNomeArquivoBackup(){
+  const dias=['DOMINGO','SEGUNDA-FEIRA','TERÇA-FEIRA','QUARTA-FEIRA','QUINTA-FEIRA','SEXTA-FEIRA','SÁBADO'];
+  const agora=new Date();
+  const diaSemana=dias[agora.getDay()];
+  const dataFormatada=`${String(agora.getDate()).padStart(2,'0')}-${String(agora.getMonth()+1).padStart(2,'0')}-${agora.getFullYear()}`;
+  return `BACKUP_GERAL_DOS_RDOS_FEITO_${dataFormatada}_${diaSemana}.xlsx`;
+}
+
 function exportarPDF(){
   if(!travarAcao('exportarPDF',2000)) return;
   autoSilentSave();
@@ -7721,7 +7734,7 @@ async function exportarBackupCompletoExcel(btn){
     const blob=new Blob([buffer],{type:'application/octet-stream'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url; a.download=`Backup_Completo_RDOs_MasterEnergy_${hojeLocal()}.xlsx`;
+    a.href=url; a.download=getNomeArquivoBackup();
     a.click();
     setTimeout(()=>URL.revokeObjectURL(url),3000);
     showToast(`✓ Backup completo gerado! ${rdosUnicos} RDO(s), ${totalHorasGeral.toFixed(1)}h no total.`,'#16a34a');
