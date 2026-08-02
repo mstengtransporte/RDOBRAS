@@ -120,6 +120,11 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
 .btn:hover{filter:brightness(1.2);transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.35)}
 .btn:active{transform:translateY(0);filter:brightness(.9)}
 .btn-save{background:#158038;color:#fff;border-color:#0d5228}
+@keyframes piscarPendente{
+  0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.8);background:#dc2626;border-color:#8a1010}
+  50%{box-shadow:0 0 0 8px rgba(220,38,38,0);background:#ef4444;border-color:#dc2626}
+}
+.btn-save.pendente{animation:piscarPendente 1.2s ease-in-out infinite}
 .btn-search{background:#4030c0;color:#fff;border-color:#2818a0}
 .btn-new{background:#c07010;color:#fff;border-color:#8a4e08}
 .btn-pdf{background:#6030bb;color:#fff;border-color:#4020a0}
@@ -1422,7 +1427,7 @@ input.login-input,
     <button class="btn admin-only-btn" style="background:#1a52c8;color:#fff" onclick="abrirAndamento()" title="Controle consolidado de horas por projeto (Em Andamento)">🔵 <span>Andamento</span></button>
     <button class="btn admin-only-btn" style="background:#c2410c;color:#fff" onclick="abrirProjetos()" title="Total de horas de cada projeto, do início até a conclusão, em qualquer status">📁 <span>Horas/Projeto</span></button>
     <span class="topbar-divider"></span>
-    <button class="btn btn-save"    onclick="salvarRDO()" title="Salva neste aparelho E envia pro admin">💾 <span>Salvar e Enviar</span></button>
+    <button class="btn btn-save" id="btn-salvar-enviar"    onclick="salvarRDO()" title="Salva neste aparelho E envia pro admin"><span id="icone-salvar">💾</span> <span id="label-salvar">Salvar e Enviar</span></button>
     <button class="btn" style="background:#d97706;color:#fff" onclick="verificarEReenviarPendentes()" title="Confere se algum RDO seu ficou só neste aparelho sem chegar no admin, e reenvia">🔄 <span>Reenviar</span></button>
     <button class="btn admin-only-btn" style="background:#0a6080;color:#fff" onclick="abrirGerenciarClientes()" title="Adicionar/remover clientes da lista de Obra/Projeto">👥 <span>Clientes</span></button>
     <button class="btn" id="btn-desfazer" style="background:#7c5a00;color:#fff" onclick="desfazerUltimaAcao()" title="Desfazer: volta ao estado de antes da última ação (excluir funcionário, criar novo RDO)">↩️ <span>Desfazer</span></button>
@@ -2834,6 +2839,36 @@ function estaEnviado(key){
   try{ return JSON.parse(localStorage.getItem(CHAVE_ENVIADOS)||'[]').includes(key); }catch(e){ return false; }
 }
 
+// Confere se existe algum RDO com conteúdo real preenchido (Obra escolhida) que ainda
+// NÃO foi enviado pro admin — se tiver, faz o botão "Salvar e Enviar" PISCAR em vermelho,
+// pra nunca passar despercebido que ainda falta apertar. Roda depois de cada autosave,
+// depois de enviar, depois de apagar — sempre que algo pode ter mudado a situação.
+function atualizarAvisoRDOsPendentes(){
+  const btn=document.getElementById('btn-salvar-enviar');
+  const label=document.getElementById('label-salvar');
+  const icone=document.getElementById('icone-salvar');
+  if(!btn||!label) return;
+  let pendentes=0;
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    if(estaEnviado(k)) continue; // já foi enviado, não conta como pendente
+    try{
+      const d=JSON.parse(localStorage.getItem(k));
+      if(d?.header?.obra&&d.header.obra.trim()) pendentes++; // só conta rascunho com Obra preenchida — vazio não é "esquecido", é só ainda não começou
+    }catch(e){}
+  }
+  if(pendentes>0){
+    btn.classList.add('pendente');
+    label.textContent=`Enviar Agora! (${pendentes} pendente${pendentes>1?'s':''})`;
+    if(icone) icone.textContent='⚠️';
+  }else{
+    btn.classList.remove('pendente');
+    label.textContent='Salvar e Enviar';
+    if(icone) icone.textContent='💾';
+  }
+}
+
 // Status das OSEs (índice 1..6)
 const oseStatus = {1:'sem',2:'sem',3:'sem',4:'sem',5:'sem',6:'sem'};
 
@@ -2906,6 +2941,7 @@ async function verificarEReenviarPendentes(){
       }catch(e){ falha++; }
     }
     showToast(`✓ ${sucesso} RDO(s) reenviado(s) com sucesso${falha?` — ${falha} ainda falharam, tente de novo`:''}.`,falha?'#d97706':'#16a34a');
+    atualizarAvisoRDOsPendentes();
   }catch(e){
     console.error('verificarEReenviarPendentes error:',e);
     showToast('Erro ao conferir pendências.','#dc2626');
@@ -2964,6 +3000,11 @@ function iniciarAppAposLogin(){
   ajustarTextareasAuto();
   initAutoSave();
   atualizarDatalistNomesProjetos();
+  atualizarAvisoRDOsPendentes();
+  // Reconfere a cada 60s — pega o caso de alguém deixar o app aberto sem mexer em nada,
+  // mesmo assim continua avisando que tem RDO parado esperando ser enviado.
+  clearInterval(window._intervalAvisoPendentes);
+  window._intervalAvisoPendentes=setInterval(atualizarAvisoRDOsPendentes,60000);
   // As buscas abaixo não são urgentes pra tela aparecer (lista de clientes/encarregados
   // pros campos de escolha, e a checagem de RDO apagado pelo admin) — adiadas pra rodar
   // só depois que o RDO já está montado e visível na tela, assim a pessoa não fica
@@ -4036,6 +4077,7 @@ async function salvarRDO(){
       alert(`⚠️ O RDO foi salvo NESTE APARELHO, mas NÃO FOI ENVIADO ao admin.\n\nMotivo: ${motivo}\n\nConfira sua internet e clique em "Salvar e Enviar" de novo. Seus dados não foram perdidos, só ainda não chegaram na nuvem.`);
       showToast('⚠️ Salvo local, mas NÃO enviado — confira sua internet e tente de novo.','#dc2626');
     }
+    atualizarAvisoRDOsPendentes();
     // Reescanear todo o histórico pra atualizar sugestões de nome de projeto pode ficar
     // pesado com muitos RDOs salvos (meses/anos de uso). Adiado pro próximo tick pra não
     // atrasar nem por um instante o retorno visual de "salvo" pro usuário.
@@ -5405,6 +5447,7 @@ function autoSilentSave(){
     // IMPORTANTE: autosave é só local, de propósito — evita perder o preenchimento se a
     // internet cair, o celular travar, etc. Não manda nada pro admin sozinho. Só o botão
     // "💾 Salvar e Enviar" envia pra nuvem, de forma explícita e consciente da pessoa.
+    atualizarAvisoRDOsPendentes();
   }catch(e){}
 }
 // Salva ao fechar/sair da aba
