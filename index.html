@@ -7547,38 +7547,50 @@ async function exportarBackupCompletoExcel(btn){
       ws.getRow(L).height=20;
       L++;
       const linhaCabecalho=L;
+      // O cabeçalho e as linhas de dado sempre recebem borda até a MESMA largura da
+      // faixa colorida do título (não só até a última coluna com dado real) — assim a
+      // borda nunca "para no meio" antes do fim da cor, não importa quantas colunas ou
+      // linhas de informação existam.
+      for(let c=1;c<=largura;c++){
+        const cel=ws.getCell(L,c);
+        cel.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE2E8F0'}};
+        cel.border={top:{style:'thin',color:{argb:'FF999999'}},bottom:{style:'thin',color:{argb:'FF999999'}},left:{style:'thin',color:{argb:'FF999999'}},right:{style:'thin',color:{argb:'FF999999'}}};
+      }
       colunas.forEach((col,ci)=>{
         const c=ws.getCell(L,ci+1);
         c.value=col; c.font={bold:true,size:10};
-        c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE2E8F0'}};
         c.alignment={horizontal:'center',vertical:'middle',wrapText:true};
-        c.border={top:{style:'thin',color:{argb:'FF999999'}},bottom:{style:'thin',color:{argb:'FF999999'}},left:{style:'thin',color:{argb:'FF999999'}},right:{style:'thin',color:{argb:'FF999999'}}};
         if(largurasColunas&&largurasColunas[ci]) ws.getColumn(ci+1).width=Math.max(ws.getColumn(ci+1).width||0,largurasColunas[ci]);
       });
       L++;
       linhas.forEach((linha,li)=>{
+        // Preenche a linha inteira (até a largura total) com fundo/borda primeiro —
+        // depois escreve os valores reais por cima. Garante que a borda e a cor de
+        // fundo alternada cobrem TODA a largura, mesmo além da última coluna com dado.
+        for(let c=1;c<=largura;c++){
+          const cel=ws.getCell(L,c);
+          cel.fill={type:'pattern',pattern:'solid',fgColor:{argb:li%2===0?'FFFFFFFF':'FFF5F7FA'}};
+          cel.border={top:{style:'thin',color:{argb:'FFDDDDDD'}},bottom:{style:'thin',color:{argb:'FFDDDDDD'}},left:{style:'thin',color:{argb:'FFDDDDDD'}},right:{style:'thin',color:{argb:'FFDDDDDD'}}};
+        }
         linha.forEach((val,ci)=>{
           const c=ws.getCell(L,ci+1);
           c.value=val;
-          c.fill={type:'pattern',pattern:'solid',fgColor:{argb:li%2===0?'FFFFFFFF':'FFF5F7FA'}};
-          c.border={top:{style:'thin',color:{argb:'FFDDDDDD'}},bottom:{style:'thin',color:{argb:'FFDDDDDD'}},left:{style:'thin',color:{argb:'FFDDDDDD'}},right:{style:'thin',color:{argb:'FFDDDDDD'}}};
           if(typeof val==='number'){ c.numFmt='0.0'; c.alignment={horizontal:'center',vertical:'middle'}; c.font={bold:true,size:10}; }
           else{ c.font={size:10}; c.alignment={horizontal:'left',vertical:'middle',indent:1}; }
         });
         L++;
       });
       const linhaFinal=L-1;
-      const numColunas=colunas.length;
       // Contorno externo mais forte (medium) em volta de tudo — título, cabeçalho e
-      // dados juntos — pra fechar a tabela com acabamento de verdade, não só linhas
-      // internas soltas.
-      for(let c=1;c<=numColunas;c++){
+      // dados juntos, até a MESMA largura da cor — pra fechar a tabela com acabamento
+      // de verdade, acompanhando a faixa colorida do início ao fim, sem faltar pedaço.
+      for(let c=1;c<=largura;c++){
         const topo=ws.getCell(linhaTitulo,c); topo.border={...topo.border,top:{style:'medium',color:{argb:'FF000000'}}};
         const base=ws.getCell(linhaFinal,c); base.border={...base.border,bottom:{style:'medium',color:{argb:'FF000000'}}};
       }
       for(let r=linhaTitulo;r<=linhaFinal;r++){
         const esq=ws.getCell(r,1); esq.border={...esq.border,left:{style:'medium',color:{argb:'FF000000'}}};
-        const dir=ws.getCell(r,numColunas); dir.border={...dir.border,right:{style:'medium',color:{argb:'FF000000'}}};
+        const dir=ws.getCell(r,largura); dir.border={...dir.border,right:{style:'medium',color:{argb:'FF000000'}}};
       }
       L+=2;
     }
@@ -7710,14 +7722,15 @@ async function exportarBackupCompletoExcel(btn){
     });
 
     // Moldura externa mais forte em volta de toda a tabela de Detalhamento (do
-    // cabeçalho até a última linha) — fecha o acabamento igual às tabelas de resumo.
+    // cabeçalho até a última linha) — vai até a MESMA largura da faixa colorida do
+    // título, pra nunca ficar mais estreita que a cor logo acima dela.
     const linhaFinalDetalhe=L-1;
-    for(let c=1;c<=NUM_COLS_DETALHE;c++){
+    for(let c=1;c<=largura;c++){
       const b=ws.getCell(linhaFinalDetalhe,c); b.border={...b.border,bottom:{style:'medium',color:{argb:'FF000000'}}};
     }
     for(let r=headerRowNum;r<=linhaFinalDetalhe;r++){
       const esq=ws.getCell(r,1); esq.border={...esq.border,left:{style:'medium',color:{argb:'FF000000'}}};
-      const dir=ws.getCell(r,NUM_COLS_DETALHE); dir.border={...dir.border,right:{style:'medium',color:{argb:'FF000000'}}};
+      const dir=ws.getCell(r,largura); dir.border={...dir.border,right:{style:'medium',color:{argb:'FF000000'}}};
     }
 
     ws.autoFilter={from:{row:headerRowNum,column:1},to:{row:headerRowNum,column:NUM_COLS_DETALHE}};
