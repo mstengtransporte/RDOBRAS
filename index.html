@@ -1431,7 +1431,7 @@ input.login-input,
     <button class="btn" style="background:#0a6080;color:#fff" onclick="abrirGrafico()">📊 <span>H.H</span></button>
     <button class="btn" style="background:#0a7060;color:#fff" onclick="abrirFrases()">💬 <span>Frases</span></button>
     <button class="btn admin-only-btn" id="btn-rel-periodo" style="background:#6030bb;color:#fff" onclick="abrirMultiPDF()">📑 <span>Rel.Período</span></button>
-    <button class="btn" style="background:#374151;color:#fff" onclick="abrirBackup()">🗄️ <span>Backup</span></button>
+    <button class="btn admin-only-btn" style="background:#374151;color:#fff" onclick="abrirBackup()">🗄️ <span>Backup</span></button>
     <button class="btn admin-only-btn" style="background:#374151;color:#fff" onclick="abrirCheckIntegridade()" title="Verifica inconsistências que podem causar erro na contagem de horas">🩺 <span>Check</span></button>
     <button class="btn btn-pdf"     onclick="exportarPDF()" title="Abre a tela de impressão para salvar como PDF">🖨️ <span>PDF</span></button>
     <button class="btn btn-xlsx"    onclick="exportarXLSX()">📗 <span>Excel</span></button>
@@ -1480,7 +1480,7 @@ input.login-input,
         <option value="PINTURA">PINTURA</option>
         <option value="TÉC. SEGURANÇA">TÉC. SEGURANÇA</option>
       </select></div>
-      <div class="hfield" style="border-right:none"><label>Encarregado</label><select id="h-enc" onchange="onMudarEncarregadoSelecionado()"><option value="">— Selecione —</option></select></div>
+      <div class="hfield" style="border-right:none"><label>Encarregado <span style="font-weight:400;font-size:9px;opacity:.7">(automático)</span></label><input type="text" id="h-enc" readonly style="cursor:not-allowed;opacity:.85"></div>
     </div>
   </div>
 
@@ -1609,6 +1609,7 @@ input.login-input,
     </div>
     <div class="search-box-body">
       <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px">Mostra só RDOs já <b>Salvos e Enviados</b> — rascunho ainda não enviado não aparece aqui.</div>
+      <button type="button" class="admin-only-btn" onclick="forcarAtualizacaoBusca(this)" style="background:#7c3aed;color:#fff;border:2px solid #5b21b6;padding:8px;font-size:10.5px;font-weight:900;cursor:pointer;text-transform:uppercase;margin-bottom:8px">🔄 Atualizar com a nuvem antes de buscar</button>
       <div class="search-filters">
         <input type="date" id="search-de" title="Data inicial">
         <input type="date" id="search-ate" title="Data final">
@@ -2137,35 +2138,20 @@ function popularFiltroEncarregado(selectId){
 // Preenche o campo Encarregado do próprio RDO — pré-seleciona automaticamente o nome de
 // quem está logado (mais prático), mas deixa trocar se precisar (ex: admin preenchendo
 // em nome de outra pessoa). Compara de forma tolerante, mesmo esquema da Obra.
+// O campo Encarregado sempre mostra o nome de quem está logado agora — não dá mais pra
+// escolher outra pessoa, porque o login já É a identidade de quem está preenchendo o
+// RDO. Isso vale tanto pra um RDO novo quanto pra um já salvo (mesmo que tenha sido
+// criado com um nome digitado diferente antes, ele sempre aparece com o nome atual).
 function popularSelectEncarregado(){
-  const sel=document.getElementById('h-enc');
-  if(!sel) return;
-  const valorAtual=sel.value;
-  sel.innerHTML='<option value="">— Selecione —</option>'+
-    encarregadosCache.map(e=>`<option value="${(e.nome||'').toUpperCase()}">${e.nome}</option>`).join('');
-  if(valorAtual){
-    setEncarregadoSelecionado(valorAtual);
-  }else if(usuarioAtual?.nome&&!sel.value){
-    setEncarregadoSelecionado(usuarioAtual.nome);
-  }
+  const campo=document.getElementById('h-enc');
+  if(!campo||!usuarioAtual) return;
+  campo.value=(usuarioAtual.nome||'').toUpperCase();
 }
 
+// Mantido só por compatibilidade com chamadas antigas (ex: ao restaurar um RDO salvo) —
+// sempre trava no nome de quem está logado, não importa o que estava gravado antes.
 function setEncarregadoSelecionado(valor){
-  const sel=document.getElementById('h-enc');
-  if(!sel||!valor) return;
-  const existente=[...sel.options].find(o=>normalizarObra(o.value)===normalizarObra(valor));
-  if(existente){
-    sel.value=existente.value;
-  }else{
-    const opt=document.createElement('option');
-    opt.value=valor; opt.textContent=valor+' (não cadastrado)';
-    sel.appendChild(opt);
-    sel.value=valor;
-  }
-}
-
-function onMudarEncarregadoSelecionado(){
-  atualizarBannerObra();
+  popularSelectEncarregado();
 }
 
 function popularSelectObra(nomes,valorParaManter){
@@ -5761,8 +5747,14 @@ function initAutoSave(){
 }
 
 // ── BUSCAR RDOs ──
-function abrirBuscaRDO(){
+async function abrirBuscaRDO(){
   autoSilentSave(); // garante que as edições atuais na tela entram na busca, sem esperar o autosave
+  // Admin busca sempre atualizado com a nuvem primeiro — sem isso, um admin entrando
+  // num aparelho novo (ou que nunca sincronizou) veria a Busca vazia, mesmo tendo os
+  // mesmos acessos de outro admin cujo aparelho já tinha dados salvos localmente.
+  if(usuarioAtual&&usuarioAtual.papel==='admin_mestre'){
+    await sincronizarSeAdmin();
+  }
   buscarRDOs();
   document.getElementById('search-modal').classList.add('show');
 }
@@ -6035,8 +6027,9 @@ function deletarFrase(idx){
 // ════════════════════════════════════════════════════════════
 // FEATURE 8 — RELATÓRIO MÚLTIPLO (exporta período em XLSX)
 // ════════════════════════════════════════════════════════════
-function abrirMultiPDF(){
+async function abrirMultiPDF(){
   if(!exigirAdmin()) return;
+  await sincronizarSeAdmin(); // mesmo problema do Buscar: sem isso, um admin em aparelho sem dados locais gerava relatório vazio
   autoSilentSave(); // garante que o RDO de hoje entra na lista com as horas mais recentes
   popularListaMultiPDF();
   document.getElementById('multipdf-modal').classList.add('show');
@@ -6238,6 +6231,23 @@ async function forcarAtualizacaoPainel(painel,btn){
     if(btn){ btn.textContent='✅ Atualizado!'; }
   }catch(e){
     console.error('forcarAtualizacaoPainel error:',e);
+    if(btn) btn.textContent='❌ Erro — toque pra tentar de novo';
+  }finally{
+    setTimeout(()=>{ if(btn){ btn.disabled=false; btn.textContent=textoOriginal; btn.style.opacity=''; } },1800);
+  }
+}
+
+async function forcarAtualizacaoBusca(btn){
+  if(!exigirAdmin()) return;
+  const textoOriginal=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='🔄 Atualizando...'; btn.style.opacity='.7'; }
+  try{
+    await sincronizarSeAdmin(true);
+    buscarRDOs();
+    showToast('✓ Busca atualizada com os dados mais recentes da nuvem.','#16a34a');
+    if(btn){ btn.textContent='✅ Atualizado!'; }
+  }catch(e){
+    console.error('forcarAtualizacaoBusca error:',e);
     if(btn) btn.textContent='❌ Erro — toque pra tentar de novo';
   }finally{
     setTimeout(()=>{ if(btn){ btn.disabled=false; btn.textContent=textoOriginal; btn.style.opacity=''; } },1800);
@@ -7734,8 +7744,9 @@ async function exportarProjetosExcel(){
 // CHECK DE INTEGRIDADE — varre todos os RDOs salvos procurando inconsistências que podem
 // causar erro na contagem de horas, sem alterar nada automaticamente (só avisa).
 // ════════════════════════════════════════════════════════════
-function abrirCheckIntegridade(){
+async function abrirCheckIntegridade(){
   if(!exigirAdmin()) return;
+  await sincronizarSeAdmin(); // essencial: sem isso, um admin em aparelho sem dados locais via "tudo certo" só por falta de dado, não por estar tudo certo mesmo
   autoSilentSave(); // ESSENCIAL: o check precisa analisar o estado ATUAL da tela, não uma versão desatualizada
   executarCheckIntegridade();
   document.getElementById('check-modal').classList.add('show');
@@ -7883,6 +7894,7 @@ function coletarTodosOsDadosParaBackup(){
 }
 
 function abrirBackup(){
+  if(!exigirAdmin()) return;
   autoSilentSave(); // ESSENCIAL: o backup exportado tem que incluir as horas lançadas agora, não uma versão velha
   const total=Object.keys(coletarTodosOsDadosParaBackup().rdos).length;
   const info=document.getElementById('backup-info');
