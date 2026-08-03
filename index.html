@@ -118,6 +118,9 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
 }
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btn:hover{filter:brightness(1.2);transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.35)}
+#login-overlay button{transition:transform .1s ease,filter .1s ease,opacity .1s ease}
+#login-overlay button:active{transform:scale(.96);filter:brightness(.8)}
+#login-overlay button:disabled{opacity:.6;transform:none}
 .btn:active{transform:translateY(0);filter:brightness(.9)}
 .btn-save{background:#158038;color:#fff;border-color:#0d5228}
 @keyframes piscarFaixaPendente{
@@ -4634,8 +4637,8 @@ function _criarRDOEmBranco(mensagemToast,focarObra){
 // o mesmo padrão de nome nos dois: SEGUE_RDO_DIA-DA-SEMANA_DD-MM-AAAA_OBRA.extensao
 function getNomeArquivoRDO(extensao){
   const d=getFormData(); const h=d.header;
-  const obra=(h.obra||'OBRA').toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
-  const dia=(document.getElementById('h-dia')?.value||'').toUpperCase().replace(/[^A-Z]+/g,'_').replace(/^_|_$/g,'');
+  const obra=(h.obra||'OBRA').toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-|-$/g,'');
+  const dia=(document.getElementById('h-dia')?.value||'').toUpperCase().replace(/[^A-Z]+/g,'-').replace(/^-|-$/g,'');
   // Formata a data como DD-MM-YYYY para leitura fácil no nome do arquivo — sempre a data
   // que está gravada NESTE RDO especificamente (h.data), nunca a data do relógio agora.
   let dataFormatada='';
@@ -4646,7 +4649,7 @@ function getNomeArquivoRDO(extensao){
     const t=new Date();
     dataFormatada=`${String(t.getDate()).padStart(2,'0')}-${String(t.getMonth()+1).padStart(2,'0')}-${t.getFullYear()}`;
   }
-  return `SEGUE_RDO_${dia}_${dataFormatada}_${obra}.${extensao}`;
+  return `SEGUE-RDO-${dia}-${dataFormatada}-${obra}.${extensao}`;
 }
 
 function getPdfFilename(){
@@ -4663,7 +4666,7 @@ function getNomeArquivoBackup(){
   const agora=new Date();
   const diaSemana=dias[agora.getDay()];
   const dataFormatada=`${String(agora.getDate()).padStart(2,'0')}-${String(agora.getMonth()+1).padStart(2,'0')}-${agora.getFullYear()}`;
-  return `BACKUP_GERAL_DOS_RDOS_FEITO_${dataFormatada}_${diaSemana}.xlsx`;
+  return `BACKUP-GERAL-DOS-RDOS-FEITO-${dataFormatada}-${diaSemana}.xlsx`;
 }
 
 function exportarPDF(){
