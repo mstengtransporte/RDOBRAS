@@ -2490,7 +2490,7 @@ function renderizarDashboardAoVivo(){
           }).join('')||'<div class="dash-empty">Nenhum RDO enviado ainda.</div>'}
         </div>
         <div class="dash-panel">
-          <div class="dash-panel-title">🏭 Horas por Obra (Top 8)</div>
+          <div class="dash-panel-title">🏭 Horas Trabalhadas por Obra (8 principais)</div>
           ${obrasOrdenadas.map(o=>`
             <div class="dash-bar-row">
               <div class="dash-bar-label"><span>${o.nome}</span><span>${fmt(o.horas)}h</span></div>
@@ -2501,7 +2501,7 @@ function renderizarDashboardAoVivo(){
       </div>
       <div>
         <div class="dash-panel">
-          <div class="dash-panel-title">👷 Placar de Hoje — Quem Já Enviou</div>
+          <div class="dash-panel-title">📋 RDOs de Hoje</div>
           ${[...nomesTodos].sort().map(nome=>{
             const ativo=encarregadosComRdoHoje.has(nome);
             const r=resumo.find(x=>x.nome===nome);
