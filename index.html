@@ -2449,7 +2449,7 @@ function renderizarDashboardAoVivo(){
   const encarregadosComRdoHoje=new Set(rdosHoje.map(a=>a.encarregado));
   const totalHorasGeral=resumo.reduce((s,r)=>s+r.total,0);
 
-  // Garante que todo mundo cadastrado aparece no placar, mesmo sem RDO ainda
+  // Garante que todo mundo cadastrado aparece na lista, mesmo sem RDO ainda
   const nomesTodos=new Set(resumo.map(r=>r.nome));
   encarregadosCache.forEach(e=>{
     const nome=(e.nome||'').toUpperCase();
@@ -2467,14 +2467,99 @@ function renderizarDashboardAoVivo(){
   const maiorHoraObra=Math.max(1,...obrasOrdenadas.map(o=>o.horas));
 
   const STATUS_COR={and:'#1a52c8',ext:'#158038',conc:'#6830cc',par:'#e07010'};
+  const STATUS_NOME={and:'Em Andamento',ext:'Extra Escopo',conc:'Concluído',par:'Paralisado'};
+
+  // ── Distribuição por status (soma de todo mundo) — vira o gráfico de rosca ──
+  const totAnd=resumo.reduce((s,r)=>s+r.and,0);
+  const totExt=resumo.reduce((s,r)=>s+r.ext,0);
+  const totConc=resumo.reduce((s,r)=>s+r.conc,0);
+  const totPar=resumo.reduce((s,r)=>s+r.par,0);
+  const totStatus=totAnd+totExt+totConc+totPar;
+  const fatias=[
+    {chave:'and',horas:totAnd},{chave:'ext',horas:totExt},
+    {chave:'conc',horas:totConc},{chave:'par',horas:totPar}
+  ].filter(f=>f.horas>0);
+  let acumulado=0;
+  const gradientePartes=fatias.map(f=>{
+    const inicio=(acumulado/Math.max(totStatus,0.001))*360;
+    acumulado+=f.horas;
+    const fim=(acumulado/Math.max(totStatus,0.001))*360;
+    return `${STATUS_COR[f.chave]} ${inicio.toFixed(1)}deg ${fim.toFixed(1)}deg`;
+  }).join(', ');
+  const donutStyle=totStatus>0?`background:conic-gradient(${gradientePartes})`:'background:#1e3a5f';
+
+  // ── Horas por mês (últimos 6 meses) — vira o gráfico de barras com variação % ──
+  const porMes={};
+  todasAtividades.forEach(a=>{
+    const mes=a.data.slice(0,7); // YYYY-MM
+    porMes[mes]=(porMes[mes]||0)+a.totalHoras;
+  });
+  const mesesOrdenados=Object.keys(porMes).sort().slice(-6);
+  const NOMES_MES=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  const maiorMes=Math.max(1,...mesesOrdenados.map(m=>porMes[m]));
+  const barrasMes=mesesOrdenados.map((mes,idx)=>{
+    const horasMes=porMes[mes];
+    const anterior=idx>0?porMes[mesesOrdenados[idx-1]]:null;
+    const variacao=anterior?(((horasMes-anterior)/anterior)*100):null;
+    const [ano,numMes]=mes.split('-');
+    const rotulo=NOMES_MES[parseInt(numMes,10)-1];
+    const alturaPerc=Math.max(4,(horasMes/maiorMes*100));
+    return{rotulo,horasMes,variacao,alturaPerc};
+  });
 
   document.getElementById('dash-body').innerHTML=`
     <div class="dash-kpis">
-      <div class="dash-kpi"><div class="n">${rdosHoje.length}</div><div class="l">RDOs Hoje</div></div>
-      <div class="dash-kpi"><div class="n">${fmt(horasHoje)}h</div><div class="l">Horas Hoje</div></div>
-      <div class="dash-kpi"><div class="n">${encarregadosComRdoHoje.size}/${nomesTodos.size}</div><div class="l">Encarregados Ativos Hoje</div></div>
-      <div class="dash-kpi"><div class="n">${fmt(totalHorasGeral)}h</div><div class="l">Total Geral (Tudo)</div></div>
+      <div class="dash-kpi" style="border-left:4px solid #f59e0b"><div class="n">${rdosHoje.length}</div><div class="l">RDOs Hoje</div></div>
+      <div class="dash-kpi" style="border-left:4px solid #22c55e"><div class="n">${fmt(horasHoje)}h</div><div class="l">Horas Hoje</div></div>
+      <div class="dash-kpi" style="border-left:4px solid #1457c8"><div class="n">${encarregadosComRdoHoje.size}/${nomesTodos.size}</div><div class="l">Encarregados Ativos Hoje</div></div>
+      <div class="dash-kpi" style="border-left:4px solid #9d174d"><div class="n">${fmt(totalHorasGeral)}h</div><div class="l">Total Geral (Tudo)</div></div>
+      <div class="dash-kpi" style="border-left:4px solid ${STATUS_COR.and}"><div class="n" style="color:${STATUS_COR.and}">${fmt(totAnd)}h</div><div class="l">Em Andamento</div></div>
+      <div class="dash-kpi" style="border-left:4px solid ${STATUS_COR.ext}"><div class="n" style="color:${STATUS_COR.ext}">${fmt(totExt)}h</div><div class="l">Extra Escopo</div></div>
+      <div class="dash-kpi" style="border-left:4px solid ${STATUS_COR.conc}"><div class="n" style="color:${STATUS_COR.conc}">${fmt(totConc)}h</div><div class="l">Concluído</div></div>
+      <div class="dash-kpi" style="border-left:4px solid ${STATUS_COR.par}"><div class="n" style="color:${STATUS_COR.par}">${fmt(totPar)}h</div><div class="l">Paralisado</div></div>
     </div>
+
+    <div class="dash-grid">
+      <div class="dash-panel">
+        <div class="dash-panel-title">🍩 Distribuição de Horas por Status</div>
+        ${totStatus>0?`
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+          <div style="position:relative;width:150px;height:150px;flex-shrink:0">
+            <div style="width:150px;height:150px;border-radius:50%;${donutStyle}"></div>
+            <div style="position:absolute;inset:22px;background:#111f33;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center">
+              <div style="font-size:22px;font-weight:900;color:#fff">${fmt(totStatus)}h</div>
+              <div style="font-size:9px;color:#7c9cc4;font-weight:800;text-transform:uppercase">Total</div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:150px">
+            ${fatias.map(f=>{
+              const pct=(f.horas/totStatus*100).toFixed(0);
+              return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+                <span style="width:11px;height:11px;border-radius:3px;background:${STATUS_COR[f.chave]};flex-shrink:0"></span>
+                <span style="flex:1;color:#dbe6f5;font-size:12px;font-weight:700">${STATUS_NOME[f.chave]}</span>
+                <span style="color:#fff;font-size:12px;font-weight:900">${fmt(f.horas)}h (${pct}%)</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`:'<div class="dash-empty">Nenhum dado ainda.</div>'}
+      </div>
+
+      <div class="dash-panel">
+        <div class="dash-panel-title">📈 Horas por Mês (Últimos 6 Meses)</div>
+        ${barrasMes.length?`
+        <div style="display:flex;align-items:flex-end;gap:10px;height:150px;padding-top:20px">
+          ${barrasMes.map(b=>`
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end">
+              ${b.variacao!==null?`<div style="font-size:9.5px;font-weight:900;color:${b.variacao>=0?'#22c55e':'#ef4444'};margin-bottom:2px">${b.variacao>=0?'▲':'▼'}${Math.abs(b.variacao).toFixed(0)}%</div>`:'<div style="height:13px"></div>'}
+              <div style="width:100%;max-width:34px;background:linear-gradient(180deg,#3b82f6,#1457c8);border-radius:5px 5px 0 0;height:${b.alturaPerc.toFixed(0)}%;min-height:4px"></div>
+              <div style="font-size:9.5px;color:#dbe6f5;font-weight:800;margin-top:5px">${b.rotulo}</div>
+              <div style="font-size:9px;color:#6688aa">${fmt(b.horasMes)}h</div>
+            </div>
+          `).join('')}
+        </div>`:'<div class="dash-empty">Nenhum dado ainda.</div>'}
+      </div>
+    </div>
+
     <div class="dash-grid">
       <div>
         <div class="dash-panel">
