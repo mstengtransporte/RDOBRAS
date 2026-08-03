@@ -3259,10 +3259,14 @@ function abrirListaPendentes(){
       const h=d?.header;
       if(h?.obra&&h.obra.trim()){
         const id=extrairIdDaChave(k)||k;
-        // Se já existe uma entrada com esse id (gaveta órfã de outra data), mantém a
-        // mais recente pela data — evita listar a mesma coisa duas vezes.
-        if(!pendentesPorId[id]||h.data>pendentesPorId[id].data){
-          pendentesPorId[id]={key:k,data:h.data||'',obra:h.obra,nrdo:h.nrdo||'',enc:h.enc||''};
+        if(!pendentesPorId[id]) pendentesPorId[id]={key:k,data:h.data||'',obra:h.obra,nrdo:h.nrdo||'',enc:h.enc||'',todasChaves:[]};
+        // Guarda TODAS as gavetas desse mesmo RDO (pode ter mais de uma, órfã de troca
+        // de data antiga) — sem isso, apagar só a mostrada deixava as outras escondidas
+        // pra trás, e elas voltavam a aparecer na próxima abertura da lista, parecendo
+        // que "não apagou de verdade".
+        pendentesPorId[id].todasChaves.push(k);
+        if(h.data>pendentesPorId[id].data){
+          pendentesPorId[id]={...pendentesPorId[id],key:k,data:h.data||'',obra:h.obra,nrdo:h.nrdo||'',enc:h.enc||''};
         }
       }
     }catch(e){}
@@ -3276,14 +3280,16 @@ function abrirListaPendentes(){
     resultsEl.innerHTML=lista.map(item=>{
       const dataFmt=item.data?item.data.split('-').reverse().join('/'):'(sem data)';
       const keyEscapada=item.key.replace(/'/g,"\\'");
+      const grupoJson=JSON.stringify(item.todasChaves).replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      const avisoExtra=item.todasChaves.length>1?` <span style="opacity:.7">(+${item.todasChaves.length-1} versão(ões) antiga(s) junto)</span>`:'';
       return `<div class="rdo-result-item" style="border-color:#d97706">
         <div class="rdo-result-main">
           <span class="rdo-result-date">📅 ${dataFmt}</span>
-          <span class="rdo-result-info">${item.obra||'(sem obra)'} ${item.nrdo?'| '+item.nrdo:''} ${item.enc?'| '+item.enc:''}</span>
+          <span class="rdo-result-info">${item.obra||'(sem obra)'} ${item.nrdo?'| '+item.nrdo:''} ${item.enc?'| '+item.enc:''}${avisoExtra}</span>
         </div>
         <div class="rdo-result-actions">
-          <button class="btn-open-rdo" onclick="abrirRdoPendente('${keyEscapada}')">📂 Abrir para Conferir</button>
-          <button class="btn-del-rdo" onclick="descartarRdoPendente('${keyEscapada}')">🗑</button>
+          <button class="btn-open-rdo" onclick='abrirRdoPendente("${keyEscapada}", "${grupoJson}")'>📂 Abrir para Conferir</button>
+          <button class="btn-del-rdo" onclick='descartarRdoPendente("${grupoJson}")'>🗑</button>
         </div>
       </div>`;
     }).join('');
@@ -3292,7 +3298,7 @@ function abrirListaPendentes(){
   document.getElementById('pendentes-modal').classList.add('show');
 }
 
-function abrirRdoPendente(key){
+function abrirRdoPendente(key,grupoJson){
   const raw=localStorage.getItem(key);
   if(!raw){ showToast('Esse RDO não existe mais neste aparelho.','#d97706'); document.getElementById('pendentes-modal').classList.remove('show'); atualizarAvisoRDOsPendentes(true); return; }
   try{
@@ -3309,15 +3315,28 @@ function abrirRdoPendente(key){
   for(let o=1;o<=NUM_OSE;o++) oseStatus[o]='sem';
   buildOSECards();
   carregarRDO(); // sempre abre exatamente o RDO escolhido, sem nenhuma virada automática
+  // Limpa as OUTRAS gavetas órfãs desse mesmo RDO (de trocas de data antigas, antes da
+  // limpeza automática existir) — sem isso, elas ficavam escondidas e voltavam a
+  // aparecer como "pendente" de novo depois, mesmo você já tendo aberto e resolvido.
+  try{
+    const grupo=JSON.parse((grupoJson||'[]').replace(/&quot;/g,'"'));
+    grupo.forEach(k=>{ if(k!==key) localStorage.removeItem(k); });
+  }catch(e){}
   showToast('📂 RDO aberto — confira e clique em "Salvar e Enviar".','#1457c8');
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
-function descartarRdoPendente(key){
-  const ok=confirm('Descartar este RDO? Ele nunca foi enviado ao admin, e essa ação não pode ser desfeita.\n\nSó descarte se tiver certeza de que é rascunho/teste que não precisa mais.');
+function descartarRdoPendente(grupoJson){
+  let grupo=[];
+  try{ grupo=JSON.parse((grupoJson||'[]').replace(/&quot;/g,'"')); }catch(e){}
+  if(!grupo.length){ showToast('Nada pra descartar.','#d97706'); return; }
+  const aviso=grupo.length>1
+    ?`Descartar este RDO? Ele tem ${grupo.length} versões salvas neste aparelho (de trocas de data antigas) — TODAS serão apagadas juntas, nenhuma ficará pra trás.\n\nNunca foi enviado ao admin, e essa ação não pode ser desfeita.`
+    :'Descartar este RDO? Ele nunca foi enviado ao admin, e essa ação não pode ser desfeita.\n\nSó descarte se tiver certeza de que é rascunho/teste que não precisa mais.';
+  const ok=confirm(aviso);
   if(!ok) return;
-  localStorage.removeItem(key);
-  showToast('🗑️ RDO descartado.','#16a34a');
+  grupo.forEach(k=>localStorage.removeItem(k)); // apaga TODAS as gavetas do grupo de uma vez, nenhuma escondida sobra pra trás
+  showToast(`🗑️ RDO descartado${grupo.length>1?` (${grupo.length} versões removidas)`:''}.`,'#16a34a');
   abrirListaPendentes(); // reabre a lista já atualizada
   atualizarAvisoRDOsPendentes(true);
 }
