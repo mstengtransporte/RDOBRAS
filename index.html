@@ -2286,6 +2286,7 @@ function coletarResumoPorEncarregado(){
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    if(!estaEnviado(k)) continue; // ESSENCIAL: rascunho ainda não enviado NUNCA conta nos painéis do admin — só o que já foi confirmado na nuvem
     let d;
     try{ d=JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
     const h=d&&d.header;
@@ -6178,6 +6179,7 @@ function popularListaMultiPDF(){
   const items=[];
   keys.forEach(k=>{
     try{
+      if(!estaEnviado(k)) return; // ESSENCIAL: rascunho ainda não enviado NUNCA entra no relatório do admin
       const d=JSON.parse(localStorage.getItem(k));
       if(!d?.header?.data)return;
       const data=d.header.data;
@@ -6295,6 +6297,7 @@ function coletarDadosExtraEscopo(dataInicio,dataFim){
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    if(!estaEnviado(k)) continue; // ESSENCIAL: rascunho ainda não enviado NUNCA conta nos painéis do admin
     let d;
     try{ d=JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
     const h=d&&d.header;
@@ -6881,6 +6884,7 @@ function coletarDadosAndamento(dataInicio,dataFim){
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    if(!estaEnviado(k)) continue; // ESSENCIAL: rascunho ainda não enviado NUNCA conta nos painéis do admin
     let d;
     try{ d=JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
     const h=d&&d.header;
@@ -7240,6 +7244,7 @@ function coletarDadosProjeto(dataInicio,dataFim){
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    if(!estaEnviado(k)) continue; // ESSENCIAL: rascunho ainda não enviado NUNCA conta nos painéis do admin
     let d;
     try{ d=JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
     const h=d&&d.header;
@@ -7422,6 +7427,7 @@ function coletarTodosOsRegistrosFlat(){
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    if(!estaEnviado(k)) continue; // ESSENCIAL: rascunho ainda não enviado NUNCA entra no backup — só o confirmado na nuvem
     let d;
     try{ d=JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
     const h=d&&d.header;
