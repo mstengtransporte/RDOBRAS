@@ -2363,14 +2363,36 @@ async function abrirPainelExecutivo(){
   ov.id='exec-modal';
   ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:12px';
   ov.innerHTML=`
-    <div style="background:var(--surface,#fff);color:var(--text,#111);width:100%;max-width:920px;height:88vh;border-radius:14px;display:flex;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.5)">
-      <div id="exec-conteudo" style="flex:1;overflow-y:auto;padding:18px;min-width:0"></div>
-      <div style="width:180px;flex-shrink:0;border-left:2px solid var(--border,#e5e5e5);background:var(--surface2,#f7f7f7);overflow-y:auto;padding:12px 8px">
-        <div style="font-size:10px;font-weight:900;text-transform:uppercase;color:var(--text3);padding:4px 6px 8px">Encarregados</div>
-        <button onclick="renderizarVisaoGeralExecutivo()" id="exec-btn-geral" class="exec-sidebar-btn" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:#9d174d;color:#fff;border-radius:8px;font-size:12px;font-weight:900;cursor:pointer;margin-bottom:6px">📊 Visão Geral</button>
-        <div id="exec-lista-encarregados"></div>
-        <button onclick="document.getElementById('exec-modal').remove()" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:transparent;color:var(--text3);border-radius:8px;font-size:11px;cursor:pointer;margin-top:14px">✕ Fechar</button>
-        <button onclick="forcarAtualizacaoPainel('executivo',this)" style="display:block;width:100%;text-align:center;padding:9px 8px;border:2px solid #0d5228;background:#158038;color:#fff;border-radius:8px;font-size:10.5px;font-weight:900;cursor:pointer;margin-top:8px;text-transform:uppercase">🔄 Atualizar agora</button>
+    <style>
+      .exec-box{background:var(--surface,#fff);color:var(--text,#111);width:100%;max-width:920px;height:88vh;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+      .exec-header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:2px solid var(--border,#e5e5e5);background:var(--surface2,#f7f7f7);flex-shrink:0}
+      .exec-header-title{flex:1;font-weight:900;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .exec-btn-voltar{background:#374151;color:#fff;border:none;padding:10px 14px;border-radius:8px;font-weight:800;font-size:12.5px;cursor:pointer;white-space:nowrap;min-height:40px}
+      .exec-btn-fechar{background:#dc2626;color:#fff;border:2px solid #8a1010;padding:10px 16px;border-radius:8px;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;min-height:40px}
+      .exec-body{flex:1;display:flex;overflow:hidden;min-height:0}
+      .exec-conteudo{flex:1;overflow-y:auto;padding:16px;min-width:0}
+      .exec-sidebar{width:190px;flex-shrink:0;border-left:2px solid var(--border,#e5e5e5);background:var(--surface2,#f7f7f7);overflow-y:auto;padding:12px 8px}
+      .exec-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:18px}
+      @media(max-width:700px){
+        .exec-body{flex-direction:column}
+        .exec-sidebar{width:100%;border-left:none;border-top:2px solid var(--border,#e5e5e5);max-height:34vh}
+        .exec-header-title{font-size:12.5px}
+      }
+    </style>
+    <div class="exec-box">
+      <div class="exec-header">
+        <button class="exec-btn-voltar" id="exec-btn-voltar" style="display:none" onclick="renderizarVisaoGeralExecutivo()">🔙 Voltar</button>
+        <span class="exec-header-title">🎯 Painel Executivo</span>
+        <button class="exec-btn-fechar" onclick="document.getElementById('exec-modal').remove()">✕ Fechar</button>
+      </div>
+      <div class="exec-body">
+        <div id="exec-conteudo" class="exec-conteudo"></div>
+        <div class="exec-sidebar">
+          <div style="font-size:10px;font-weight:900;text-transform:uppercase;color:var(--text3);padding:4px 6px 8px">Encarregados</div>
+          <button onclick="renderizarVisaoGeralExecutivo()" id="exec-btn-geral" class="exec-sidebar-btn" style="display:block;width:100%;text-align:left;padding:9px 8px;border:none;background:#9d174d;color:#fff;border-radius:8px;font-size:12px;font-weight:900;cursor:pointer;margin-bottom:6px">📊 Visão Geral</button>
+          <div id="exec-lista-encarregados"></div>
+          <button onclick="forcarAtualizacaoPainel('executivo',this)" style="display:block;width:100%;text-align:center;padding:10px 8px;border:2px solid #0d5228;background:#158038;color:#fff;border-radius:8px;font-size:11px;font-weight:900;cursor:pointer;margin-top:10px;text-transform:uppercase;min-height:40px">🔄 Atualizar agora</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -2406,10 +2428,14 @@ function renderizarVisaoGeralExecutivo(){
   const totalConc=resumo.reduce((s,r)=>s+r.conc,0);
   const totalRDOs=resumo.reduce((s,r)=>s+r.rdos,0);
 
+  // Esconde o "Voltar" na Visão Geral (não faz sentido voltar de onde já se está)
+  const btnVoltar=document.getElementById('exec-btn-voltar');
+  if(btnVoltar) btnVoltar.style.display='none';
+
   document.getElementById('exec-conteudo').innerHTML=`
     <div style="font-size:18px;font-weight:900;margin-bottom:2px">📊 Visão Geral — Todos os Encarregados</div>
     <div style="font-size:11.5px;color:var(--text3);margin-bottom:16px">Soma de tudo que está sincronizado da nuvem até agora.</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">
+    <div class="exec-stats-grid">
       <div class="ee-card"><div class="v" style="color:var(--text)">${fmt(totalGeral)}</div><div class="l">Total H.H Geral</div></div>
       <div class="ee-card"><div class="v" style="color:#1a52c8">${fmt(totalAnd)}</div><div class="l">Em Andamento</div></div>
       <div class="ee-card"><div class="v" style="color:#158038">${fmt(totalExt)}</div><div class="l">Extra Escopo</div></div>
@@ -2511,10 +2537,15 @@ function selecionarEncarregadoExecutivo(nome){
   const STATUS_COR={and:'#1a52c8',ext:'#158038',conc:'#6830cc',par:'#e07010'};
   const STATUS_NOME={and:'Em Andamento',ext:'Extra Escopo',conc:'Concluído',par:'Paralisado'};
 
+  // Mostra o "Voltar" — faz sentido aqui, já que dá pra voltar direto pra Visão Geral
+  // sem precisar usar a lista lateral (útil especialmente no celular, rolando menos).
+  const btnVoltar=document.getElementById('exec-btn-voltar');
+  if(btnVoltar) btnVoltar.style.display='inline-block';
+
   document.getElementById('exec-conteudo').innerHTML=`
     <div style="font-size:18px;font-weight:900;margin-bottom:2px">👷 ${r.nome}</div>
     <div style="font-size:11.5px;color:var(--text3);margin-bottom:16px">${r.rdos} RDO(s) · ${r.obras} obra(s) diferente(s) · último lançamento em ${formatarDataBR(r.ultimaData)}</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px">
+    <div class="exec-stats-grid">
       <div class="ee-card"><div class="v" style="color:var(--text)">${fmt(r.total)}</div><div class="l">Total H.H</div></div>
       <div class="ee-card"><div class="v" style="color:#1a52c8">${fmt(r.and)}</div><div class="l">Em Andamento</div></div>
       <div class="ee-card"><div class="v" style="color:#158038">${fmt(r.ext)}</div><div class="l">Extra Escopo</div></div>
