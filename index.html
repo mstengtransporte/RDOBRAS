@@ -628,15 +628,15 @@ tfoot td.col-sem{background:rgba(255,255,255,.12);color:rgba(255,255,255,.9)}
 /* ══════════════════════════════════════
    MODAIS BASE
    ══════════════════════════════════════ */
-#list-modal,#search-modal,#pdf-loading{
+#list-modal,#search-modal,#pendentes-modal,#pdf-loading{
   position:fixed;inset:0;z-index:9997;display:none;
   align-items:center;justify-content:center;padding:14px;
   background:rgba(0,0,0,.75);backdrop-filter:blur(6px)
 }
 #pdf-loading{z-index:9998;flex-direction:column;gap:16px}
-#list-modal.show,#search-modal.show{display:flex}
+#list-modal.show,#search-modal.show,#pendentes-modal.show{display:flex}
 #pdf-loading.show{display:flex}
-#search-modal{align-items:flex-start;padding:50px 14px 14px;overflow-y:auto}
+#search-modal,#pendentes-modal{align-items:flex-start;padding:50px 14px 14px;overflow-y:auto}
 
 /* Modal base box */
 .list-box,.search-box{
@@ -1453,7 +1453,7 @@ input.login-input,
     <button class="btn btn-pdf"     onclick="exportarPDF()" title="Abre a tela de impressão para salvar como PDF">🖨️ <span>PDF</span></button>
     <button class="btn btn-xlsx"    onclick="exportarXLSX()">📗 <span>Excel</span></button>
   </div>
-  <div id="aviso-rdo-pendente" onclick="salvarRDO()" style="cursor:pointer"></div>
+  <div id="aviso-rdo-pendente" onclick="abrirListaPendentes()" style="cursor:pointer"></div>
 </div>
 
 <div class="page" id="rdo-page">
@@ -1619,6 +1619,28 @@ input.login-input,
 <div id="autosave-dot">💾 Salvo</div>
 
 <!-- SEARCH MODAL -->
+<div id="pendentes-modal">
+  <div class="search-box">
+    <div class="search-box-header">
+      <h3>⚠️ RDOs Ainda Não Enviados</h3>
+      <button onclick="document.getElementById('pendentes-modal').classList.remove('show')" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0 4px;line-height:1">✕</button>
+    </div>
+    <div class="search-box-body">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+        Estes ficaram salvos só neste aparelho, sem nunca ter sido enviados pro admin.<br>
+        <b>"Abrir para Conferir" não envia nada sozinho</b> — só coloca o RDO de volta na
+        tela, pra você revisar. Depois, clique no botão verde "Salvar e Enviar" de sempre
+        pra realmente mandar. Ou descarte, se for só rascunho de teste que não precisa mais.
+      </div>
+      <div id="pendentes-results" class="search-results"></div>
+    </div>
+    <div class="search-box-footer">
+      <span class="search-footer-info" id="pendentes-count"></span>
+      <button onclick="document.getElementById('pendentes-modal').classList.remove('show')">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <div id="search-modal">
   <div class="search-box">
     <div class="search-box-header">
@@ -2932,6 +2954,86 @@ function atualizarAvisoRDOsPendentes(forcar=false){
   // O tamanho da barra de cima muda quando a faixa aparece/some — recalcula o espaço
   // reservado no topo da página, senão o conteúdo fica escondido atrás dela.
   if(typeof ajustarEspacoTopoTopbar==='function') ajustarEspacoTopoTopbar();
+}
+
+// Mostra EXATAMENTE quais RDOs estão pendentes (não só o número) — antes, o aviso só
+// sabia enviar o RDO que estava na tela na hora, nunca resolvendo os outros escondidos
+// no aparelho, o que deixava a contagem "presa" mesmo depois de enviar o que estava
+// visível. Agora dá pra abrir e enviar (ou descartar, se for só rascunho de teste) cada
+// um deles, um por um, até a contagem realmente zerar.
+function abrirListaPendentes(){
+  autoSilentSave();
+  const pendentesPorId={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
+    if(estaEnviado(k)) continue;
+    try{
+      const d=JSON.parse(localStorage.getItem(k));
+      const h=d?.header;
+      if(h?.obra&&h.obra.trim()){
+        const id=extrairIdDaChave(k)||k;
+        // Se já existe uma entrada com esse id (gaveta órfã de outra data), mantém a
+        // mais recente pela data — evita listar a mesma coisa duas vezes.
+        if(!pendentesPorId[id]||h.data>pendentesPorId[id].data){
+          pendentesPorId[id]={key:k,data:h.data||'',obra:h.obra,nrdo:h.nrdo||'',enc:h.enc||''};
+        }
+      }
+    }catch(e){}
+  }
+  const lista=Object.values(pendentesPorId).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  const resultsEl=document.getElementById('pendentes-results');
+  const countEl=document.getElementById('pendentes-count');
+  if(!lista.length){
+    resultsEl.innerHTML='<div class="search-empty">Nenhum RDO pendente encontrado — tudo certo!</div>';
+  }else{
+    resultsEl.innerHTML=lista.map(item=>{
+      const dataFmt=item.data?item.data.split('-').reverse().join('/'):'(sem data)';
+      const keyEscapada=item.key.replace(/'/g,"\\'");
+      return `<div class="rdo-result-item" style="border-color:#d97706">
+        <div class="rdo-result-main">
+          <span class="rdo-result-date">📅 ${dataFmt}</span>
+          <span class="rdo-result-info">${item.obra||'(sem obra)'} ${item.nrdo?'| '+item.nrdo:''} ${item.enc?'| '+item.enc:''}</span>
+        </div>
+        <div class="rdo-result-actions">
+          <button class="btn-open-rdo" onclick="abrirRdoPendente('${keyEscapada}')">📂 Abrir para Conferir</button>
+          <button class="btn-del-rdo" onclick="descartarRdoPendente('${keyEscapada}')">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  countEl.textContent=`${lista.length} RDO(s) pendente(s)`;
+  document.getElementById('pendentes-modal').classList.add('show');
+}
+
+function abrirRdoPendente(key){
+  const raw=localStorage.getItem(key);
+  if(!raw){ showToast('Esse RDO não existe mais neste aparelho.','#d97706'); document.getElementById('pendentes-modal').classList.remove('show'); atualizarAvisoRDOsPendentes(true); return; }
+  try{
+    autoSilentSave(); // salva o que estava na tela antes de trocar
+    localStorage.setItem('rdo-last-key',key);
+  }catch(e){
+    showToast('⚠️ Erro ao trocar de RDO — armazenamento pode estar cheio.','#dc2626');
+    return;
+  }
+  document.getElementById('pendentes-modal').classList.remove('show');
+  // Mesmo padrão usado em "Abrir RDO" pela Busca — reseta status/cor das OSEs e
+  // reconstrói os cards do zero antes de carregar, pra nunca ficar cor presa de outro
+  // RDO na tela.
+  for(let o=1;o<=NUM_OSE;o++) oseStatus[o]='sem';
+  buildOSECards();
+  carregarRDO(); // sempre abre exatamente o RDO escolhido, sem nenhuma virada automática
+  showToast('📂 RDO aberto — confira e clique em "Salvar e Enviar".','#1457c8');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function descartarRdoPendente(key){
+  const ok=confirm('Descartar este RDO? Ele nunca foi enviado ao admin, e essa ação não pode ser desfeita.\n\nSó descarte se tiver certeza de que é rascunho/teste que não precisa mais.');
+  if(!ok) return;
+  localStorage.removeItem(key);
+  showToast('🗑️ RDO descartado.','#16a34a');
+  abrirListaPendentes(); // reabre a lista já atualizada
+  atualizarAvisoRDOsPendentes(true);
 }
 
 // Status das OSEs (índice 1..6)
@@ -5868,7 +5970,7 @@ const FECHAR_MODAL_POR_ID={
   'frases-modal':fecharFrases,
   'novo-rdo-modal':fecharNovoRDOModal,
 };
-const IDS_MODAIS_COM_ESC=['list-modal','search-modal','grafico-modal','frases-modal',
+const IDS_MODAIS_COM_ESC=['list-modal','search-modal','pendentes-modal','grafico-modal','frases-modal',
   'multipdf-modal','extra-escopo-modal','andamento-modal','projetos-modal','check-modal',
   'novo-rdo-modal','backup-modal'];
 document.addEventListener('keydown',e=>{
