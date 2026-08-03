@@ -2763,6 +2763,23 @@ async function buscarERestaurarDaNuvem(dataDe,dataAte){
         sucesso++;
       }catch(e){falha++;}
     });
+
+    // CORREÇÃO DE INCONSISTÊNCIA: se a busca foi completa (sem filtro de data — pega
+    // TUDO que existe na nuvem), qualquer RDO marcado como "enviado" neste aparelho que
+    // NÃO apareceu agora na nuvem está com uma marcação falsa/antiga (de antes das
+    // proteções que já colocamos, ou de algum teste). Remove essa marcação errada — o
+    // RDO volta a aparecer como rascunho não enviado, e some do Buscar, corrigindo o
+    // que estava mostrando informação desencontrada da realidade.
+    if(!dataDe&&!dataAte){
+      const chavesConfirmadasNaNuvem=new Set(rdosData.map(r=>r.rdo_key));
+      let listaEnviados=[];
+      try{ listaEnviados=JSON.parse(localStorage.getItem(CHAVE_ENVIADOS)||'[]'); }catch(e){}
+      const listaCorrigida=listaEnviados.filter(k=>chavesConfirmadasNaNuvem.has(k));
+      if(listaCorrigida.length!==listaEnviados.length){
+        localStorage.setItem(CHAVE_ENVIADOS,JSON.stringify(listaCorrigida));
+      }
+    }
+
     return{sucesso,falha,erro:null};
   }catch(e){
     console.error('buscarERestaurarDaNuvem error:',e);
