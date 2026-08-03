@@ -2905,16 +2905,24 @@ function atualizarAvisoRDOsPendentes(forcar=false){
   if(!forcar&&agora-_ultimaVerificacaoPendentes<5000) return;
   _ultimaVerificacaoPendentes=agora;
 
-  let pendentes=0;
+  // Conta por IDENTIDADE do RDO (o id fixo dele), não pela "gaveta" onde está salvo —
+  // a gaveta muda de nome toda vez que a data é alterada (a data faz parte do nome),
+  // então trocar de data 3 vezes durante o preenchimento cria 3 gavetas do MESMO RDO.
+  // Sem agrupar por id, isso contava como 3 RDOs pendentes em vez de 1.
+  const idsPendentes=new Set();
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
     if(estaEnviado(k)) continue; // já foi enviado, não conta como pendente
     try{
       const d=JSON.parse(localStorage.getItem(k));
-      if(d?.header?.obra&&d.header.obra.trim()) pendentes++; // só conta rascunho com Obra preenchida — vazio não é "esquecido", é só ainda não começou
+      if(d?.header?.obra&&d.header.obra.trim()){ // só conta rascunho com Obra preenchida — vazio não é "esquecido", é só ainda não começou
+        const id=extrairIdDaChave(k);
+        idsPendentes.add(id||k); // agrupa pelo id fixo; sem id (RDO bem antigo), usa a própria chave
+      }
     }catch(e){}
   }
+  const pendentes=idsPendentes.size;
   if(pendentes>0){
     faixa.textContent=`⚠️ ATENÇÃO: VOCÊ TEM ${pendentes} RDO${pendentes>1?'S':''} NÃO ENVIADO${pendentes>1?'S':''} AO ADMIN! TOQUE AQUI PRA ENVIAR AGORA ⚠️`;
     faixa.classList.add('show');
@@ -3047,7 +3055,18 @@ function iniciarAppAposLogin(){
   carregarListas();
   document.getElementById('h-data').value = hojeLocal();
   updateDiaSemana();
-  document.getElementById('h-data').addEventListener('change',()=>{updateDiaSemana();renderizarRdosDoDia();renderizarObrasParadas();});
+  document.getElementById('h-data').addEventListener('change',(ev)=>{
+    // Como a data faz parte do nome da "gaveta" onde o RDO fica salvo localmente,
+    // trocar a data durante o preenchimento cria uma gaveta NOVA e deixa a antiga
+    // (da data anterior) órfã, ainda salva sem necessidade — limpa ela aqui, assim
+    // não acumula lixo no aparelho nem confunde contagens em nenhum outro lugar.
+    const dataAnterior=_lastSaveKey?_lastSaveKey.match(/^rdo-([\d-]+|draft)/)?.[1]:null;
+    updateDiaSemana();renderizarRdosDoDia();renderizarObrasParadas();
+    autoSilentSave();
+    if(dataAnterior&&_lastSaveKey&&!_lastSaveKey.startsWith(`rdo-${dataAnterior}`)){
+      localStorage.removeItem(`rdo-${dataAnterior}${rdoAtualId?'__'+rdoAtualId:''}`);
+    }
+  });
   buildWorkersTable(1);
   buildOSECards();
   carregarRDO();
