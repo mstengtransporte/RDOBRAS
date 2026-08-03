@@ -4225,8 +4225,25 @@ function carregarRDO(){
     // SEM virada automática de dia — o app sempre reabre exatamente o RDO que você deixou,
     // não importa a data. Criar um RDO novo (do mesmo dia ou do dia seguinte) só acontece
     // quando VOCÊ clica em "Novo RDO" e escolhe — nunca sozinho, nunca sem perguntar.
-    rdoAtualId=extrairIdDaChave(key);
-    restaurarEstadoCompleto(d);
+    // Se o RDO é de antes desse identificador fixo existir (chave antiga sem "__id"),
+    // gera um agora — sem isso, trocar a data desse RDO ficava criando gaveta nova toda
+    // vez, sem jeito de reconhecer que era o mesmo RDO (causava contagem errada no
+    // aviso de pendências e nos painéis do admin).
+    const idExtraido=extrairIdDaChave(key);
+    if(!idExtraido&&!estaEnviado(key)){
+      // Só migra pra chave nova quando o RDO NUNCA foi enviado — um RDO já enviado tem
+      // essa mesma chave antiga referenciada lá na nuvem (rdo_key); mudando aqui sem
+      // mudar lá, quebraria o vínculo e podia gerar duplicata na próxima sincronização.
+      rdoAtualId=gerarRdoId();
+      restaurarEstadoCompleto(d);
+      autoSilentSave(); // salva já com a gaveta nova (com id)...
+      localStorage.removeItem(key); // ...e remove a gaveta antiga (sem id), pra não duplicar
+    }else{
+      rdoAtualId=idExtraido; // pode ficar vazio se for chave antiga já enviada — tudo bem, esse
+                              // caso específico (RDO antigo já confirmado na nuvem) não sofre do
+                              // problema de duplicar gaveta ao trocar de data, já está "fechado"
+      restaurarEstadoCompleto(d);
+    }
   }catch(e){console.error('carregarRDO error:',e);}
 }
 
