@@ -1865,27 +1865,21 @@ input.login-input,
 <!-- HORAS POR PROJETO — total acumulado de cada projeto (todos os status somados), do
      início até a conclusão, pra saber quanto cada projeto custou em H.H no total -->
 <div id="projetos-modal">
-  <div class="multipdf-box" style="max-width:920px">
+  <div class="multipdf-box" style="max-width:960px;height:90vh;max-height:90vh">
     <div class="multipdf-header" style="background:linear-gradient(135deg,#6830cc,#4a1e96)">
       <span>📊 Horas por Projeto (início até conclusão)</span>
       <button onclick="document.getElementById('projetos-modal').classList.remove('show')" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">✕</button>
     </div>
-    <div class="multipdf-body" style="overflow-y:hidden">
-      <div style="flex-shrink:0">
-        <label>Período (deixe em branco pra ver tudo)</label>
-        <div style="display:flex;gap:8px">
-          <input type="date" id="pj-de" style="flex:1">
-          <input type="date" id="pj-ate" style="flex:1">
-          <button type="button" onclick="renderizarProjetos()" style="background:#c2410c;color:#fff;border:2px solid #7c2d0a;padding:0 14px;font-size:12px;font-weight:900;cursor:pointer">🔍 Filtrar</button>
-        </div>
+    <div class="multipdf-body" style="overflow-y:hidden;padding:10px;gap:6px">
+      <div style="flex-shrink:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="pj-de" title="Data inicial (deixe em branco pra ver tudo)" style="flex:1;min-width:110px;padding:5px">
+        <input type="date" id="pj-ate" title="Data final (deixe em branco pra ver tudo)" style="flex:1;min-width:110px;padding:5px">
+        <select id="pj-encarregado" onchange="renderizarProjetos()" title="Ver só de um encarregado" style="flex:1;min-width:140px;padding:5px"><option value="">— Todos os encarregados —</option></select>
+        <button type="button" onclick="renderizarProjetos()" style="background:#c2410c;color:#fff;border:2px solid #7c2d0a;padding:6px 12px;font-size:11px;font-weight:900;cursor:pointer;white-space:nowrap">🔍 Filtrar</button>
+        <button type="button" onclick="forcarAtualizacaoPainel('projetos',this)" style="background:#158038;color:#fff;border:2px solid #0d5228;padding:6px 12px;font-size:11px;font-weight:900;cursor:pointer;white-space:nowrap">🔄 Atualizar</button>
       </div>
-      <div style="flex-shrink:0">
-        <label>Ver só de um encarregado (opcional)</label>
-        <select id="pj-encarregado" onchange="renderizarProjetos()" style="width:100%"><option value="">— Todos os encarregados —</option></select>
-      </div>
-      <button type="button" onclick="forcarAtualizacaoPainel('projetos',this)" style="background:#158038;color:#fff;border:2px solid #0d5228;padding:9px;font-size:11px;font-weight:900;cursor:pointer;text-transform:uppercase;flex-shrink:0">🔄 Atualizar agora (busca tudo de novo na nuvem)</button>
-      <div id="pj-resumo" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px;flex-shrink:0"></div>
-      <div id="pj-lista-wrap" style="flex:1;min-height:280px;overflow-y:auto;border:2px solid #000;margin-top:4px;padding:6px"></div>
+      <div id="pj-resumo" style="display:flex;gap:6px;flex-shrink:0"></div>
+      <div id="pj-lista-wrap" style="flex:1;min-height:0;overflow-y:auto;border:2px solid #000;padding:8px"></div>
     </div>
     <div class="multipdf-footer">
       <button class="multipdf-cancel" onclick="document.getElementById('projetos-modal').classList.remove('show')">Fechar</button>
@@ -7859,9 +7853,9 @@ function renderizarProjetos(){
   const totalGeral=dados.reduce((s,r)=>s+r.horas,0);
   const concluidos=listaProjetos.filter(p=>p.concluidoEm).length;
   document.getElementById('pj-resumo').innerHTML=`
-    <div class="ee-card"><div class="v" style="color:#c2410c">${fmt(totalGeral)}</div><div class="l">Total H.H (todos os projetos)</div></div>
-    <div class="ee-card"><div class="v" style="color:#c2410c">${listaProjetos.length}</div><div class="l">Projetos no período</div></div>
-    <div class="ee-card"><div class="v" style="color:#c2410c">${concluidos}</div><div class="l">Já concluídos</div></div>
+    <div style="flex:1;background:var(--surface2);border:2px solid #000;padding:5px 8px;text-align:center"><b style="color:#c2410c;font-size:14px">${fmt(totalGeral)}h</b> <span style="font-size:9.5px;color:var(--text3)">total</span></div>
+    <div style="flex:1;background:var(--surface2);border:2px solid #000;padding:5px 8px;text-align:center"><b style="color:#c2410c;font-size:14px">${listaProjetos.length}</b> <span style="font-size:9.5px;color:var(--text3)">projetos</span></div>
+    <div style="flex:1;background:var(--surface2);border:2px solid #000;padding:5px 8px;text-align:center"><b style="color:#c2410c;font-size:14px">${concluidos}</b> <span style="font-size:9.5px;color:var(--text3)">concluídos</span></div>
   `;
 
   const STATUS_COR_PJ={and:'#1a52c8',ext:'#158038',conc:'#6830cc',par:'#e07010'};
