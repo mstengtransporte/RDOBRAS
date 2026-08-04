@@ -3609,6 +3609,7 @@ function gerarProximoNRDO(obra){
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||k==='rdo-last-key'||k==='rdo-names-list'||k==='rdo-funcs-list'||k==='rdo-theme') continue;
+    if(!estaEnviado(k)) continue; // ESSENCIAL: rascunho não confirmado nunca ocupa número — só o que já foi realmente enviado, mesma regra usada na resolução final do número
     try{
       const d=JSON.parse(localStorage.getItem(k));
       const obraRdo=normalizarObra(d?.header?.obra);
@@ -4509,10 +4510,13 @@ async function resolverNumeroSemConflito(obra,chaveAtual){
   if(!obraChave) return null;
   let maior=0;
 
-  // 1) Local — mesma obra, ignorando a própria chave
+  // 1) Local — mesma obra, ignorando a própria chave — SÓ conta RDO que já foi
+  // realmente ENVIADO. Um rascunho parado no aparelho (mesmo com um número sugerido
+  // nele) NUNCA pode "reservar" aquele número de verdade — só o que está confirmado.
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)||k===chaveAtual) continue;
+    if(!estaEnviado(k)) continue; // ESSENCIAL: rascunho não confirmado nunca ocupa número
     try{
       const d=JSON.parse(localStorage.getItem(k));
       if(normalizarObra(d?.header?.obra)!==obraChave) continue;
@@ -4603,13 +4607,41 @@ async function salvarRDO(){
     }
 
     showToast('☁️ Enviando pro admin...','#7c3aed');
-    const resultado=await syncSalvarSupabase(d);
+
+    // PROTEÇÃO CONTRA COLISÃO DE VERDADE: se dois encarregados clicarem "Salvar e
+    // Enviar" quase ao mesmo tempo, na mesma obra, existe uma fração de segundo onde os
+    // dois podem calcular o MESMO próximo número — o banco de dados tem uma trava física
+    // que recusa a segunda tentativa duplicada (nunca deixa duas linhas com o mesmo
+    // número na mesma obra). Quando isso acontece, em vez de mostrar erro pra pessoa, o
+    // app recalcula sozinho o próximo número disponível e tenta de novo automaticamente
+    // — assim ninguém pula número, ninguém duplica, e a pessoa nem percebe que existiu
+    // uma disputa por aquele número.
+    let resultado;
+    let tentativas=0;
+    const MAX_TENTATIVAS=5;
+    while(tentativas<MAX_TENTATIVAS){
+      tentativas++;
+      resultado=await syncSalvarSupabase(d);
+      if(resultado&&resultado.sucesso) break;
+      const erroTexto=(resultado?.erro||'').toLowerCase();
+      const foiColisaoDeNumero=erroTexto.includes('duplicate')||erroTexto.includes('unique')||erroTexto.includes('idx_rdos_obra_nrdo');
+      if(!foiColisaoDeNumero) break; // outro tipo de erro (sem internet, etc.) — não adianta tentar de novo
+      if(!d.header.obra) break; // sem obra não tem como recalcular número, não deveria acontecer aqui
+      const proximoNumero=await resolverNumeroSemConflito(d.header.obra,key);
+      if(!proximoNumero) break;
+      d.header.nrdo=proximoNumero;
+      const campoNrdo=document.getElementById('h-nrdo');
+      if(campoNrdo) campoNrdo.value=proximoNumero;
+      localStorage.setItem(key,JSON.stringify(d)); // atualiza a gaveta local com o número corrigido também
+    }
+
     if(resultado&&resultado.sucesso){
       // Só marca como "enviado" (aparece na Busca) DEPOIS de confirmar que chegou na nuvem
       // de verdade — antes disso o app avisava sucesso sem checar, e o RDO podia nunca ter
       // chegado no admin sem ninguém perceber.
       marcarComoEnviado(key);
-      showToast('✓ RDO salvo e enviado ao admin!','#16a34a');
+      const avisoRenumeracao=tentativas>1?` (número final: ${d.header.nrdo}, ajustado automaticamente por causa de outro envio simultâneo)`:'';
+      showToast(`✓ RDO salvo e enviado ao admin!${avisoRenumeracao}`,'#16a34a');
     }else{
       const motivo=resultado?.erro||'Falha de conexão com o servidor.';
       alert(`⚠️ O RDO foi salvo NESTE APARELHO, mas NÃO FOI ENVIADO ao admin.\n\nMotivo: ${motivo}\n\nConfira sua internet e clique em "Salvar e Enviar" de novo. Seus dados não foram perdidos, só ainda não chegaram na nuvem.`);
