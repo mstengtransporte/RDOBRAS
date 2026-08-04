@@ -2944,6 +2944,17 @@ async function _syncSalvarSupabaseReal(d,rdoKey){
   const supabaseClient=getSupabaseClient();
   if(!supabaseClient||!usuarioAtual) return{sucesso:false,semLogin:true}; // sem login, não sincroniza (fica só local)
   try{
+    // CRÍTICO: busca o usuário REAL da sessão atual do Supabase, agora, na hora do envio
+    // — nunca confia só no "usuarioAtual.id" guardado na memória do JavaScript, porque
+    // esse valor pode ficar desatualizado (ex: computador com várias contas entrando e
+    // saindo) sem o app perceber. Se mandasse o id errado aqui, a regra de segurança do
+    // banco barra o envio com "row-level security policy" — foi exatamente esse erro que
+    // apareceu. Conferir na hora elimina esse descompasso de vez.
+    const{data:sessaoAtual,error:erroSessao}=await supabaseClient.auth.getUser();
+    if(erroSessao||!sessaoAtual?.user){
+      return{sucesso:false,erro:'Sua sessão expirou ou não bateu com o login atual. Saia (🚪 Sair) e entre de novo com sua conta antes de tentar enviar.'};
+    }
+    const idRealDoUsuario=sessaoAtual.user.id;
     const h=d.header||{};
     const{data:rdoRow,error:erroRdo}=await supabaseClient
       .from('rdos')
@@ -2957,7 +2968,7 @@ async function _syncSalvarSupabaseReal(d,rdoKey){
         names_list:d.namesList||[],
         funcs_list:d.funcsList||[],
         row_counter:d.rowCounter||0,
-        criado_por:usuarioAtual.id
+        criado_por:idRealDoUsuario
       },{onConflict:'rdo_key'})
       .select('id')
       .single();
@@ -3259,7 +3270,7 @@ function abrirListaPendentes(){
       const h=d?.header;
       if(h?.obra&&h.obra.trim()){
         const id=extrairIdDaChave(k)||k;
-        if(!pendentesPorId[id]) pendentesPorId[id]={key:k,data:h.data||'',obra:h.obra,nrdo:h.nrdo||'',enc:h.enc||'',todasChaves:[]};
+        if(!pendentesPorId[id]) pendentesPorId[id]={id,key:k,data:h.data||'',obra:h.obra,nrdo:h.nrdo||'',enc:h.enc||'',todasChaves:[]};
         // Guarda TODAS as gavetas desse mesmo RDO (pode ter mais de uma, órfã de troca
         // de data antiga) — sem isso, apagar só a mostrada deixava as outras escondidas
         // pra trás, e elas voltavam a aparecer na próxima abertura da lista, parecendo
@@ -3272,34 +3283,67 @@ function abrirListaPendentes(){
     }catch(e){}
   }
   const lista=Object.values(pendentesPorId).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+
   const resultsEl=document.getElementById('pendentes-results');
   const countEl=document.getElementById('pendentes-count');
+  resultsEl.innerHTML=''; // limpa qualquer conteúdo/clique antigo antes de reconstruir
+
   if(!lista.length){
-    resultsEl.innerHTML='<div class="search-empty">Nenhum RDO pendente encontrado — tudo certo!</div>';
+    const vazio=document.createElement('div');
+    vazio.className='search-empty';
+    vazio.textContent='Nenhum RDO pendente encontrado — tudo certo!';
+    resultsEl.appendChild(vazio);
   }else{
-    resultsEl.innerHTML=lista.map(item=>{
+    // IMPORTANTE: os botões são criados aqui via JavaScript (createElement +
+    // addEventListener) em vez de escrever onclick="..." como texto dentro do HTML —
+    // assim o clique chama a função DIRETO, com os dados reais na memória, sem precisar
+    // converter nada pra texto e de volta. Elimina de vez qualquer risco de o clique
+    // silenciosamente não funcionar por causa de aspas ou caractere especial no meio.
+    lista.forEach(item=>{
       const dataFmt=item.data?item.data.split('-').reverse().join('/'):'(sem data)';
-      const keyEscapada=item.key.replace(/'/g,"\\'");
-      const grupoJson=JSON.stringify(item.todasChaves).replace(/'/g,"\\'").replace(/"/g,'&quot;');
-      const avisoExtra=item.todasChaves.length>1?` <span style="opacity:.7">(+${item.todasChaves.length-1} versão(ões) antiga(s) junto)</span>`:'';
-      return `<div class="rdo-result-item" style="border-color:#d97706">
-        <div class="rdo-result-main">
-          <span class="rdo-result-date">📅 ${dataFmt}</span>
-          <span class="rdo-result-info">${item.obra||'(sem obra)'} ${item.nrdo?'| '+item.nrdo:''} ${item.enc?'| '+item.enc:''}${avisoExtra}</span>
-        </div>
-        <div class="rdo-result-actions">
-          <button class="btn-open-rdo" onclick='abrirRdoPendente("${keyEscapada}", "${grupoJson}")'>📂 Abrir para Conferir</button>
-          <button class="btn-del-rdo" onclick='descartarRdoPendente("${grupoJson}")'>🗑</button>
-        </div>
-      </div>`;
-    }).join('');
+
+      const linha=document.createElement('div');
+      linha.className='rdo-result-item';
+      linha.style.borderColor='#d97706';
+
+      const main=document.createElement('div');
+      main.className='rdo-result-main';
+      const dataEl=document.createElement('span');
+      dataEl.className='rdo-result-date';
+      dataEl.textContent='📅 '+dataFmt;
+      const infoEl=document.createElement('span');
+      infoEl.className='rdo-result-info';
+      let infoTexto=(item.obra||'(sem obra)')+(item.nrdo?' | '+item.nrdo:'')+(item.enc?' | '+item.enc:'');
+      if(item.todasChaves.length>1) infoTexto+=`  (+${item.todasChaves.length-1} versão(ões) antiga(s) junto)`;
+      infoEl.textContent=infoTexto;
+      main.appendChild(dataEl); main.appendChild(infoEl);
+
+      const acoes=document.createElement('div');
+      acoes.className='rdo-result-actions';
+
+      const btnAbrir=document.createElement('button');
+      btnAbrir.className='btn-open-rdo';
+      btnAbrir.type='button';
+      btnAbrir.textContent='📂 Abrir para Conferir';
+      btnAbrir.addEventListener('click',()=>abrirRdoPendente(item.key,item.todasChaves));
+
+      const btnApagar=document.createElement('button');
+      btnApagar.className='btn-del-rdo';
+      btnApagar.type='button';
+      btnApagar.textContent='🗑';
+      btnApagar.addEventListener('click',()=>descartarRdoPendente(item.todasChaves));
+
+      acoes.appendChild(btnAbrir); acoes.appendChild(btnApagar);
+      linha.appendChild(main); linha.appendChild(acoes);
+      resultsEl.appendChild(linha);
+    });
   }
   countEl.textContent=`${lista.length} RDO(s) pendente(s)`;
   document.getElementById('pendentes-modal').classList.add('show');
 }
 
-function abrirRdoPendente(key,grupoJson){
-  const raw=localStorage.getItem(key);
+function abrirRdoPendente(key,todasChaves){
+  const raw=key?localStorage.getItem(key):null;
   if(!raw){ showToast('Esse RDO não existe mais neste aparelho.','#d97706'); document.getElementById('pendentes-modal').classList.remove('show'); atualizarAvisoRDOsPendentes(true); return; }
   try{
     autoSilentSave(); // salva o que estava na tela antes de trocar
@@ -3318,17 +3362,13 @@ function abrirRdoPendente(key,grupoJson){
   // Limpa as OUTRAS gavetas órfãs desse mesmo RDO (de trocas de data antigas, antes da
   // limpeza automática existir) — sem isso, elas ficavam escondidas e voltavam a
   // aparecer como "pendente" de novo depois, mesmo você já tendo aberto e resolvido.
-  try{
-    const grupo=JSON.parse((grupoJson||'[]').replace(/&quot;/g,'"'));
-    grupo.forEach(k=>{ if(k!==key) localStorage.removeItem(k); });
-  }catch(e){}
+  (todasChaves||[]).forEach(k=>{ if(k!==key) localStorage.removeItem(k); });
   showToast('📂 RDO aberto — confira e clique em "Salvar e Enviar".','#1457c8');
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
-function descartarRdoPendente(grupoJson){
-  let grupo=[];
-  try{ grupo=JSON.parse((grupoJson||'[]').replace(/&quot;/g,'"')); }catch(e){}
+function descartarRdoPendente(todasChaves){
+  const grupo=todasChaves||[];
   if(!grupo.length){ showToast('Nada pra descartar.','#d97706'); return; }
   const aviso=grupo.length>1
     ?`Descartar este RDO? Ele tem ${grupo.length} versões salvas neste aparelho (de trocas de data antigas) — TODAS serão apagadas juntas, nenhuma ficará pra trás.\n\nNunca foi enviado ao admin, e essa ação não pode ser desfeita.`
