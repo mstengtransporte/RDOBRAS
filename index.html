@@ -8367,23 +8367,29 @@ async function exportarProjetosExcel(){
   if(!dados.length){ showToast('Nenhum projeto encontrado pra exportar.','#d97706'); return; }
   if(typeof ExcelJS==='undefined'){ showToast('Biblioteca de Excel ainda carregando — espera 2 segundos e tenta de novo.','#d97706'); return; }
 
+  // Uma linha por Projeto + Disciplina — nunca soma horas de disciplinas diferentes
+  // juntas: se o mesmo projeto teve Mecânica e Elétrica trabalhando nele, cada uma vira
+  // sua própria linha, com o total de horas dela específica, sem misturar com a outra.
   const projetos={};
   dados.forEach(r=>{
     const chaveProjeto=normalizarObra(r.projeto);
-    if(!projetos[chaveProjeto]) projetos[chaveProjeto]={nome:r.projeto,obra:r.obra,totalHoras:0,primeiraData:r.data,ultimaData:r.data,concluidoEm:null,statusAtual:r.status};
-    const p=projetos[chaveProjeto];
+    const chaveDisc=normalizarObra(r.disc);
+    const chaveCombo=chaveProjeto+'|'+chaveDisc;
+    if(!projetos[chaveCombo]) projetos[chaveCombo]={nome:r.projeto,obra:r.obra,disc:r.disc||'—',totalHoras:0,primeiraData:r.data,ultimaData:r.data,concluidoEm:null,statusAtual:r.status};
+    const p=projetos[chaveCombo];
     p.totalHoras+=r.horas;
     if(r.data<p.primeiraData) p.primeiraData=r.data;
     if(r.data>=p.ultimaData){ p.ultimaData=r.data; p.statusAtual=r.status; }
     if(r.status==='conc') p.concluidoEm = !p.concluidoEm || r.data>p.concluidoEm ? r.data : p.concluidoEm;
   });
-  const lista=Object.values(projetos).sort((a,b)=>b.totalHoras-a.totalHoras);
+  // Ordena por Projeto (agrupa as disciplinas do mesmo projeto juntas), depois por Horas
+  const lista=Object.values(projetos).sort((a,b)=>a.nome.localeCompare(b.nome)||b.totalHoras-a.totalHoras);
 
   const wb=new ExcelJS.Workbook();
   wb.creator='Master Energy — Sistema de RDO';
   wb.created=new Date();
   const ws=wb.addWorksheet('Horas por Projeto',{properties:{tabColor:{argb:'FFC2410C'}}});
-  const LARG=7;
+  const LARG=8;
 
   ws.mergeCells(1,1,3,LARG);
   const titulo=ws.getCell(1,1);
@@ -8393,13 +8399,13 @@ async function exportarProjetosExcel(){
   for(let r=1;r<=3;r++) for(let c=1;c<=LARG;c++) ws.getCell(r,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0A3C64'}};
 
   ws.mergeCells(4,1,4,LARG);
-  ws.getCell(4,1).value=`HORAS POR PROJETO — DO INÍCIO ATÉ A CONCLUSÃO — Período: ${de?formatarDataBR(de):'início'} até ${ate?formatarDataBR(ate):'hoje'}`;
+  ws.getCell(4,1).value=`HORAS POR PROJETO E DISCIPLINA — DO INÍCIO ATÉ A CONCLUSÃO — Período: ${de?formatarDataBR(de):'início'} até ${ate?formatarDataBR(ate):'hoje'}`;
   ws.getCell(4,1).font={italic:true,bold:true,size:11,color:{argb:'FF0A3C64'}};
   ws.getCell(4,1).alignment={horizontal:'center'};
   ws.getRow(4).height=20;
 
   const headerRow=6;
-  const headers=['PROJETO','OBRA/CLIENTE','PRIMEIRO DIA','ÚLTIMO DIA','SITUAÇÃO','CONCLUÍDO EM','TOTAL DE HORAS'];
+  const headers=['PROJETO','OBRA/CLIENTE','DISCIPLINA','PRIMEIRO DIA','ÚLTIMO DIA','SITUAÇÃO','CONCLUÍDO EM','HORAS DESSA DISCIPLINA'];
   headers.forEach((h,ci)=>{
     const c=ws.getCell(headerRow,ci+1);
     c.value=h; c.font={bold:true,color:{argb:'FFFFFFFF'},size:10};
@@ -8413,7 +8419,7 @@ async function exportarProjetosExcel(){
     const statusFinal=p.concluidoEm?'CONCLUÍDO':(STATUS_LABEL_PROJETO[p.statusAtual]||p.statusAtual).toUpperCase();
     const corStatus=p.concluidoEm?'FF6830CC':(STATUS_COR_PJ[p.statusAtual]||'FF888888');
     const row=headerRow+1+idx;
-    const valores=[p.nome,p.obra,formatarDataBR(p.primeiraData),formatarDataBR(p.ultimaData),statusFinal,p.concluidoEm?formatarDataBR(p.concluidoEm):'—',Number(p.totalHoras.toFixed(1))];
+    const valores=[p.nome,p.obra,p.disc,formatarDataBR(p.primeiraData),formatarDataBR(p.ultimaData),statusFinal,p.concluidoEm?formatarDataBR(p.concluidoEm):'—',Number(p.totalHoras.toFixed(1))];
     valores.forEach((v,ci)=>{
       const c=ws.getCell(row,ci+1);
       c.value=v;
@@ -8422,15 +8428,15 @@ async function exportarProjetosExcel(){
       if(typeof v==='number'){ c.numFmt='0.0'; c.font={bold:true,size:10}; c.alignment={horizontal:'center'}; }
       else{ c.font={size:10}; c.alignment={horizontal:'left',vertical:'middle',indent:1}; }
     });
-    const situacaoCell=ws.getCell(row,5);
+    const situacaoCell=ws.getCell(row,6);
     situacaoCell.font={bold:true,color:{argb:'FFFFFFFF'},size:9.5};
     situacaoCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:corStatus}};
     situacaoCell.alignment={horizontal:'center',vertical:'middle'};
   });
 
   ws.autoFilter={from:{row:headerRow,column:1},to:{row:headerRow,column:LARG}};
-  ws.getColumn(1).width=34; ws.getColumn(2).width=24; ws.getColumn(3).width=13; ws.getColumn(4).width=13;
-  ws.getColumn(5).width=18; ws.getColumn(6).width=14; ws.getColumn(7).width=13;
+  ws.getColumn(1).width=32; ws.getColumn(2).width=22; ws.getColumn(3).width=18; ws.getColumn(4).width=13;
+  ws.getColumn(5).width=13; ws.getColumn(6).width=16; ws.getColumn(7).width=13; ws.getColumn(8).width=12;
 
   const buffer=await wb.xlsx.writeBuffer();
   const blob=new Blob([buffer],{type:'application/octet-stream'});
