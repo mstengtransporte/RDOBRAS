@@ -2946,15 +2946,28 @@ async function _syncSalvarSupabaseReal(d,rdoKey){
   try{
     // CRÍTICO: busca o usuário REAL da sessão atual do Supabase, agora, na hora do envio
     // — nunca confia só no "usuarioAtual.id" guardado na memória do JavaScript, porque
-    // esse valor pode ficar desatualizado (ex: computador com várias contas entrando e
-    // saindo) sem o app perceber. Se mandasse o id errado aqui, a regra de segurança do
-    // banco barra o envio com "row-level security policy" — foi exatamente esse erro que
-    // apareceu. Conferir na hora elimina esse descompasso de vez.
+    // esse valor pode ficar desatualizado. Isso acontece principalmente quando o MESMO
+    // navegador é usado por duas contas diferentes (o login é compartilhado entre abas
+    // do mesmo navegador — é assim que qualquer site funciona, não é algo que dá pra
+    // mudar). Em vez de travar com erro quando isso acontece, o app se AUTOAJUSTA pro
+    // login certo e avisa claramente, sem perder o RDO nem travar a pessoa.
     const{data:sessaoAtual,error:erroSessao}=await supabaseClient.auth.getUser();
     if(erroSessao||!sessaoAtual?.user){
-      return{sucesso:false,erro:'Sua sessão expirou ou não bateu com o login atual. Saia (🚪 Sair) e entre de novo com sua conta antes de tentar enviar.'};
+      return{sucesso:false,erro:'Sua sessão expirou. Saia (🚪 Sair) e entre de novo com sua conta antes de tentar enviar.'};
     }
     const idRealDoUsuario=sessaoAtual.user.id;
+    if(idRealDoUsuario!==usuarioAtual.id){
+      // Este navegador foi trocado pra outra conta (alguém entrou aqui depois de você) —
+      // realinha automaticamente quem o app considera logado, e avisa com clareza, em
+      // vez de simplesmente recusar o envio.
+      const nomeAntigo=usuarioAtual.nome;
+      await carregarPerfilUsuario(sessaoAtual.user);
+      if(!usuarioAtual){
+        return{sucesso:false,erro:'Sua sessão expirou. Saia (🚪 Sair) e entre de novo com sua conta antes de tentar enviar.'};
+      }
+      showToast(`⚠️ Este aparelho estava com outro login ativo — ajustado de "${nomeAntigo}" pra "${usuarioAtual.nome}". Confira se é você antes de continuar!`,'#d97706');
+    }
+    const idAtualConfirmado=usuarioAtual.id;
     const h=d.header||{};
     const{data:rdoRow,error:erroRdo}=await supabaseClient
       .from('rdos')
@@ -2968,7 +2981,7 @@ async function _syncSalvarSupabaseReal(d,rdoKey){
         names_list:d.namesList||[],
         funcs_list:d.funcsList||[],
         row_counter:d.rowCounter||0,
-        criado_por:idRealDoUsuario
+        criado_por:idAtualConfirmado
       },{onConflict:'rdo_key'})
       .select('id')
       .single();
