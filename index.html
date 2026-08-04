@@ -136,6 +136,12 @@ textarea.hrs.falta,textarea.hrs.cedo,textarea.hrs.integracao,textarea.hrs.aguard
   text-transform:uppercase
 }
 #aviso-rdo-pendente.show{display:block}
+/* Aviso "calmo" — RDO ainda incompleto, sendo preenchido normalmente, não é um alarme
+   de esquecimento. Sem piscar, cor neutra, texto não gritado em maiúsculo. */
+#aviso-rdo-pendente.info{
+  animation:none;background:#374151;text-transform:none;font-weight:700;
+  border-top-color:rgba(255,255,255,.2);border-bottom-color:rgba(255,255,255,.2)
+}
 .btn-search{background:#4030c0;color:#fff;border-color:#2818a0}
 .btn-new{background:#c07010;color:#fff;border-color:#8a4e08}
 .btn-pdf{background:#6030bb;color:#fff;border-color:#4020a0}
@@ -1623,15 +1629,17 @@ input.login-input,
 <div id="pendentes-modal">
   <div class="search-box">
     <div class="search-box-header">
-      <h3>⚠️ RDOs Ainda Não Enviados</h3>
+      <h3>📋 RDOs Não Enviados / Incompletos</h3>
       <button onclick="document.getElementById('pendentes-modal').classList.remove('show')" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0 4px;line-height:1">✕</button>
     </div>
     <div class="search-box-body">
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
-        Estes ficaram salvos só neste aparelho, sem nunca ter sido enviados pro admin.<br>
-        <b>"Abrir para Conferir" não envia nada sozinho</b> — só coloca o RDO de volta na
-        tela, pra você revisar. Depois, clique no botão verde "Salvar e Enviar" de sempre
-        pra realmente mandar. Ou descarte, se for só rascunho de teste que não precisa mais.
+        Estes ficaram salvos só neste aparelho, sem nunca ter sido enviados pro admin.
+        <b>✅ PRONTO PRA ENVIAR</b> = já tem tudo que precisa, só falta clicar em enviar.
+        <b>⚠️ FALTA</b> = ainda não pode ser enviado, mostra exatamente o que falta preencher.<br>
+        "Abrir/Continuar" <b>não envia nada sozinho</b> — só coloca o RDO de volta na tela,
+        pra você revisar (ou terminar de preencher). Depois, clique no botão verde "Salvar e
+        Enviar" de sempre pra realmente mandar. Ou descarte, se for rascunho de teste.
       </div>
       <div id="pendentes-results" class="search-results"></div>
     </div>
@@ -3219,6 +3227,13 @@ function estaEnviado(key){
 // pra nunca passar despercebido que ainda falta apertar. Roda depois de cada autosave,
 // depois de enviar, depois de apagar — sempre que algo pode ter mudado a situação.
 let _ultimaVerificacaoPendentes=0;
+// Define exatamente o que é um RDO "completo" — mesma regra usada pra liberar o envio
+// em salvarRDO() (Data, Obra, Disciplina, Encarregado). Reaproveitar essa definição
+// garante que o aviso e o botão de enviar NUNCA discordem sobre o que está "pronto".
+function rdoEstaCompleto(h){
+  return !!(h?.data&&h?.obra&&h.obra.trim()&&h?.disc&&h.disc.trim()&&h?.enc&&h.enc.trim());
+}
+
 function atualizarAvisoRDOsPendentes(forcar=false){
   const faixa=document.getElementById('aviso-rdo-pendente');
   if(!faixa) return;
@@ -3235,25 +3250,39 @@ function atualizarAvisoRDOsPendentes(forcar=false){
   // a gaveta muda de nome toda vez que a data é alterada (a data faz parte do nome),
   // então trocar de data 3 vezes durante o preenchimento cria 3 gavetas do MESMO RDO.
   // Sem agrupar por id, isso contava como 3 RDOs pendentes em vez de 1.
-  const idsPendentes=new Set();
+  //
+  // IMPORTANTE: só entra na conta de "esqueceu de enviar" (o alarme vermelho piscando)
+  // quem está REALMENTE PRONTO (passaria na validação de envio) mas não foi mandado —
+  // um RDO ainda sendo preenchido (ex: só a Obra escolhida, faltando Encarregado) é
+  // trabalho normal em andamento, não um esquecimento, e não deveria alarmar ninguém.
+  const idsCompletosPendentes=new Set();
+  const idsIncompletos=new Set();
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(!k||!k.startsWith('rdo-')||CHAVES_META_BACKUP.includes(k)) continue;
     if(estaEnviado(k)) continue; // já foi enviado, não conta como pendente
     try{
       const d=JSON.parse(localStorage.getItem(k));
-      if(d?.header?.obra&&d.header.obra.trim()){ // só conta rascunho com Obra preenchida — vazio não é "esquecido", é só ainda não começou
-        const id=extrairIdDaChave(k);
-        idsPendentes.add(id||k); // agrupa pelo id fixo; sem id (RDO bem antigo), usa a própria chave
-      }
+      const h=d?.header;
+      if(!h?.obra||!h.obra.trim()) continue; // sem Obra nenhuma ainda — nem rascunho de verdade é, ignora
+      const id=extrairIdDaChave(k)||k; // agrupa pelo id fixo; sem id (RDO bem antigo), usa a própria chave
+      if(rdoEstaCompleto(h)) idsCompletosPendentes.add(id);
+      else idsIncompletos.add(id);
     }catch(e){}
   }
-  const pendentes=idsPendentes.size;
+  const pendentes=idsCompletosPendentes.size;
   if(pendentes>0){
-    faixa.textContent=`⚠️ ATENÇÃO: VOCÊ TEM ${pendentes} RDO${pendentes>1?'S':''} NÃO ENVIADO${pendentes>1?'S':''} AO ADMIN! TOQUE AQUI PRA ENVIAR AGORA ⚠️`;
+    faixa.textContent=`⚠️ ATENÇÃO: VOCÊ TEM ${pendentes} RDO${pendentes>1?'S':''} PRONTO${pendentes>1?'S':''} MAS NÃO ENVIADO${pendentes>1?'S':''}! TOQUE AQUI PRA ENVIAR AGORA ⚠️`;
     faixa.classList.add('show');
+    faixa.classList.remove('info');
+  }else if(idsIncompletos.size>0){
+    // Aviso bem mais calmo (sem piscar) — só avisa que existe rascunho ainda incompleto
+    // parado, sem soar como "você esqueceu algo grave".
+    const qtd=idsIncompletos.size;
+    faixa.textContent=`📝 Você tem ${qtd} RDO${qtd>1?'S':''} ainda incompleto${qtd>1?'s':''} (faltando algum campo obrigatório) — toque aqui pra continuar preenchendo.`;
+    faixa.classList.add('show','info');
   }else{
-    faixa.classList.remove('show');
+    faixa.classList.remove('show','info');
   }
   // O tamanho da barra de cima muda quando a faixa aparece/some — recalcula o espaço
   // reservado no topo da página, senão o conteúdo fica escondido atrás dela.
@@ -3277,14 +3306,14 @@ function abrirListaPendentes(){
       const h=d?.header;
       if(h?.obra&&h.obra.trim()){
         const id=extrairIdDaChave(k)||k;
-        if(!pendentesPorId[id]) pendentesPorId[id]={id,key:k,data:h.data||'',obra:h.obra,nrdo:h.nrdo||'',enc:h.enc||'',todasChaves:[]};
+        if(!pendentesPorId[id]) pendentesPorId[id]={id,key:k,data:h.data||'',obra:h.obra,disc:h.disc||'',enc:h.enc||'',nrdo:h.nrdo||'',todasChaves:[]};
         // Guarda TODAS as gavetas desse mesmo RDO (pode ter mais de uma, órfã de troca
         // de data antiga) — sem isso, apagar só a mostrada deixava as outras escondidas
         // pra trás, e elas voltavam a aparecer na próxima abertura da lista, parecendo
         // que "não apagou de verdade".
         pendentesPorId[id].todasChaves.push(k);
         if(h.data>pendentesPorId[id].data){
-          pendentesPorId[id]={...pendentesPorId[id],key:k,data:h.data||'',obra:h.obra,nrdo:h.nrdo||'',enc:h.enc||''};
+          pendentesPorId[id]={...pendentesPorId[id],key:k,data:h.data||'',obra:h.obra,disc:h.disc||'',enc:h.enc||'',nrdo:h.nrdo||''};
         }
       }
     }catch(e){}
@@ -3308,20 +3337,28 @@ function abrirListaPendentes(){
     // silenciosamente não funcionar por causa de aspas ou caractere especial no meio.
     lista.forEach(item=>{
       const dataFmt=item.data?item.data.split('-').reverse().join('/'):'(sem data)';
+      // Mostra claramente pra cada um se está PRONTO (só falta enviar) ou ainda
+      // FALTANDO algum campo obrigatório — e, nesse caso, exatamente quais.
+      const faltando=[];
+      if(!item.data) faltando.push('Data');
+      if(!item.disc||!item.disc.trim()) faltando.push('Disciplina');
+      if(!item.enc||!item.enc.trim()) faltando.push('Encarregado');
+      const completo=faltando.length===0;
 
       const linha=document.createElement('div');
       linha.className='rdo-result-item';
-      linha.style.borderColor='#d97706';
+      linha.style.borderColor=completo?'#d97706':'#6b7280';
 
       const main=document.createElement('div');
       main.className='rdo-result-main';
       const dataEl=document.createElement('span');
       dataEl.className='rdo-result-date';
-      dataEl.textContent='📅 '+dataFmt;
+      dataEl.textContent=(completo?'📅 ':'📝 ')+dataFmt;
       const infoEl=document.createElement('span');
       infoEl.className='rdo-result-info';
       let infoTexto=(item.obra||'(sem obra)')+(item.nrdo?' | '+item.nrdo:'')+(item.enc?' | '+item.enc:'');
       if(item.todasChaves.length>1) infoTexto+=`  (+${item.todasChaves.length-1} versão(ões) antiga(s) junto)`;
+      infoTexto+=completo?'  ✅ PRONTO PRA ENVIAR':`  ⚠️ FALTA: ${faltando.join(', ')}`;
       infoEl.textContent=infoTexto;
       main.appendChild(dataEl); main.appendChild(infoEl);
 
@@ -3331,7 +3368,7 @@ function abrirListaPendentes(){
       const btnAbrir=document.createElement('button');
       btnAbrir.className='btn-open-rdo';
       btnAbrir.type='button';
-      btnAbrir.textContent='📂 Abrir para Conferir';
+      btnAbrir.textContent=completo?'📂 Abrir para Conferir':'✏️ Continuar Preenchendo';
       btnAbrir.addEventListener('click',()=>abrirRdoPendente(item.key,item.todasChaves));
 
       const btnApagar=document.createElement('button');
@@ -3377,13 +3414,30 @@ function abrirRdoPendente(key,todasChaves){
 function descartarRdoPendente(todasChaves){
   const grupo=todasChaves||[];
   if(!grupo.length){ showToast('Nada pra descartar.','#d97706'); return; }
-  const aviso=grupo.length>1
-    ?`Descartar este RDO? Ele tem ${grupo.length} versões salvas neste aparelho (de trocas de data antigas) — TODAS serão apagadas juntas, nenhuma ficará pra trás.\n\nNunca foi enviado ao admin, e essa ação não pode ser desfeita.`
-    :'Descartar este RDO? Ele nunca foi enviado ao admin, e essa ação não pode ser desfeita.\n\nSó descarte se tiver certeza de que é rascunho/teste que não precisa mais.';
+  // Descobre se algum desses é o RDO que está ABERTO NA TELA agora — se for, só apagar
+  // do armazenamento não resolve: o autosave (que roda sozinho a cada poucos segundos)
+  // vai recriar ele de novo, porque os dados ainda estão preenchidos nos campos visíveis.
+  // É exatamente esse caso que fazia parecer "não consigo apagar, ele sempre volta".
+  const chaveAtivaAgora=localStorage.getItem('rdo-last-key');
+  const eOAtivoNaTela=chaveAtivaAgora&&grupo.includes(chaveAtivaAgora);
+  const aviso=eOAtivoNaTela
+    ?'Este é o RDO que está ABERTO NA TELA agora — descartar ele também vai LIMPAR os campos que você está vendo (Obra, Encarregado, Disciplina e horas voltam em branco).\n\nNunca foi enviado ao admin, e essa ação não pode ser desfeita. Continuar?'
+    :(grupo.length>1
+      ?`Descartar este RDO? Ele tem ${grupo.length} versões salvas neste aparelho (de trocas de data antigas) — TODAS serão apagadas juntas, nenhuma ficará pra trás.\n\nNunca foi enviado ao admin, e essa ação não pode ser desfeita.`
+      :'Descartar este RDO? Ele nunca foi enviado ao admin, e essa ação não pode ser desfeita.\n\nSó descarte se tiver certeza de que é rascunho/teste que não precisa mais.');
   const ok=confirm(aviso);
   if(!ok) return;
   grupo.forEach(k=>localStorage.removeItem(k)); // apaga TODAS as gavetas do grupo de uma vez, nenhuma escondida sobra pra trás
-  showToast(`🗑️ RDO descartado${grupo.length>1?` (${grupo.length} versões removidas)`:''}.`,'#16a34a');
+  if(eOAtivoNaTela){
+    // Limpa os campos visíveis também — senão o autosave, na próxima vez que rodar
+    // sozinho, salva de novo exatamente o que acabou de ser apagado.
+    localStorage.removeItem('rdo-last-key');
+    ['h-obra','h-enc','h-disc'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+    for(let o=1;o<=NUM_OSE;o++) oseStatus[o]='sem';
+    if(typeof buildOSECards==='function') buildOSECards();
+    if(typeof atualizarBannerObra==='function') atualizarBannerObra();
+  }
+  showToast(`🗑️ RDO descartado${grupo.length>1?` (${grupo.length} versões removidas)`:''}${eOAtivoNaTela?' — a tela foi limpa também':''}.`,'#16a34a');
   abrirListaPendentes(); // reabre a lista já atualizada
   atualizarAvisoRDOsPendentes(true);
 }
